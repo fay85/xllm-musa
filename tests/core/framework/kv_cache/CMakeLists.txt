@@ -13,6 +13,7 @@ cc_test(
   SRCS
     ${cache_layout_builder_test_sources}
   DEPS
+    :common_layers
     :kv_cache
     GTest::gtest_main
 )

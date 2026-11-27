@@ -22,7 +22,7 @@ limitations under the License.
 namespace xllm {
 
 // Instance-role predicates shared by every options struct that carries
-// `enable_disagg_pd()`, `enable_pd_ooc()` and `instance_role()` (xllm::Options,
+// `enable_disagg_pd()` and `instance_role()` (xllm::Options,
 // runtime::Options and ContinuousScheduler::Options). They exist because a bare
 // `instance_role() == InstanceRole::PREFILL` comparison does not mean "this
 // instance only runs prefill": the role flag and the deployment-shape flags are
@@ -46,19 +46,6 @@ template <typename OptionsType>
 inline bool is_pd_prefill_role(const OptionsType& options) {
   return options.enable_disagg_pd() &&
          options.instance_role() == InstanceRole::PREFILL;
-}
-
-// True only for an instance that never executes a decode batch locally. This
-// is stricter than is_pd_prefill_role(): under online-offline co-location
-// (enable_pd_ooc=true) the PD prefill instance also decodes its offline
-// requests, because PDOOCScheduler::prefill_step() drives the regular
-// ContinuousScheduler loop and PDOOCScheduler::prepare_batch() schedules
-// decode_queue_offline_ whenever no prefill is pending. Use this predicate for
-// correctness gates that assume no decode path is ever reached, and
-// is_pd_prefill_role() for the PD-topology gates.
-template <typename OptionsType>
-inline bool is_pd_prefill_only(const OptionsType& options) {
-  return is_pd_prefill_role(options) && !options.enable_pd_ooc();
 }
 
 }  // namespace xllm

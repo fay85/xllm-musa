@@ -65,11 +65,8 @@ TEST(XGrammarSupportTest, DisaggPdIsSupportedAfterCrossInstanceVerification) {
   // Regular disagg PD passed the real 1P1D cross-instance verification
   // (grammar spec on the KV first generation, per-token FSM mask on the
   // decode side), so it no longer contributes an unsupported feature.
-  // PD OOC stays gated until its scheduler populates the grammar fields.
   XGrammarSupportInputs inputs;
   EXPECT_TRUE(xgrammar_unsupported_features(inputs).empty());
-  inputs.enable_pd_ooc = true;
-  EXPECT_TRUE(contains(xgrammar_unsupported_features(inputs), "pd_ooc"));
 }
 
 TEST(XGrammarSupportTest, ServiceRoutingUsesSerializedConstraintStates) {
@@ -82,17 +79,6 @@ TEST(XGrammarSupportTest, PromptPrefixCacheDoesNotAdvanceResponseGrammar) {
   XGrammarSupportInputs inputs;
   inputs.enable_prefix_cache = true;
   EXPECT_TRUE(xgrammar_unsupported_features(inputs).empty());
-}
-
-TEST(XGrammarSupportTest, OnlyTheGatedFeaturesAreReported) {
-  // Graph, service routing, and prompt prefix caching no longer participate.
-  XGrammarSupportInputs inputs;
-  inputs.enable_service_routing = true;
-  inputs.enable_prefix_cache = true;
-  inputs.enable_pd_ooc = true;
-  const auto unsupported = xgrammar_unsupported_features(inputs);
-  EXPECT_EQ(unsupported.size(), 1u);
-  EXPECT_TRUE(contains(unsupported, "pd_ooc"));
 }
 
 TEST(XGrammarSupportTest, ChunkedPrefillStaysSupportedWithSpeculation) {
@@ -125,9 +111,6 @@ TEST(XGrammarSupportTest, RoutingCacheAndDFlash2StaySupportedTogether) {
   inputs.num_speculative_tokens = 7;
   inputs.speculative_algorithm = "DFlash2";
   EXPECT_TRUE(xgrammar_unsupported_features(inputs).empty());
-  inputs.enable_pd_ooc = true;
-  EXPECT_EQ(xgrammar_unsupported_features(inputs).size(), 1u);
-  EXPECT_TRUE(contains(xgrammar_unsupported_features(inputs), "pd_ooc"));
 }
 
 class CacheTestTokenizer final : public Tokenizer {

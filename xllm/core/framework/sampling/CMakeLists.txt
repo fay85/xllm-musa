@@ -38,16 +38,12 @@ cc_library(
     sampling_params.h
     logits_processor.h
     sampler.h
-    rec_sampler.h
     beam_searcher.h
-    rec_constrained_decoding.h
   SRCS
     sampling_params.cpp
     logits_processor.cpp
     sampler.cpp
-    rec_sampler.cpp
     beam_searcher.cpp
-    rec_constrained_decoding.cpp
   DEPS
     :state_dict
     :common

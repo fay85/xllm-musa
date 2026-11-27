@@ -55,7 +55,6 @@ cc_library(
     dit_worker_impl.h
     embed_worker_impl.h
     embed_vlm_worker_impl.h
-    rec_worker_impl.h
     mm_embed_vlm_worker_impl.h
     worker_client.h
     xservice_client.h
@@ -103,7 +102,6 @@ cc_library(
     dit_worker_impl.cpp
     embed_worker_impl.cpp
     embed_vlm_worker_impl.cpp
-    rec_worker_impl.cpp
     mm_embed_vlm_worker_impl.cpp
     worker_client.cpp
     xservice_client.cpp

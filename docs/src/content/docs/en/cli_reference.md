@@ -60,7 +60,7 @@ xLLM uses gflags to manage service startup parameters. `--model <PATH>` is the o
 
 | Parameter | Type | Default | Description |
 |:----------|:-----|:--------|:------------|
-| `enable_manual_loader` | `bool` | `false` | Pin decoder layer weights to host memory and use async H2D transfer. Required by `enable_rolling_load`; also implied by `enable_xtensor`. |
+| `enable_manual_loader` | `bool` | `false` | Pin decoder layer weights to host memory and use async H2D transfer. Required by `enable_rolling_load`. |
 | `enable_rolling_load` | `bool` | `false` | Enable rolling weight load: keep only N decoder layer weight slots in HBM and stream-load each layer just in time. Requires `enable_manual_loader=true`. NPU only. |
 | `rolling_load_num_cached_layers` | `int32` | `2` | Number of decoder layer weight slots to keep in HBM when `enable_rolling_load=true`. |
 | `rolling_load_num_rolling_slots` | `int32` | `-1` | Number of rolling slots used by decoder rolling load. Fixed slots are `rolling_load_num_cached_layers - rolling_load_num_rolling_slots`. `-1` means auto, `min(2, preload_count)`. Must be in `[-1, rolling_load_num_cached_layers]`. |
@@ -79,7 +79,6 @@ xLLM uses gflags to manage service startup parameters. `--model <PATH>` is the o
 | `enable_in_batch_prefix_cache` | `bool` | `false` | Whether to cache admitted prefill full blocks into the prefix cache so that later requests in the same batch can share them. |
 | `max_linear_state_cache_slots` | `int64` | `0` | Maximum number of active linear-attention state cache slots. `0` derives an automatic capacity from the available KV Cache budget. |
 | `xxh3_128bits_seed` | `uint32` | `1024` | Default XXH3 128-bit hash seed. |
-| `enable_xtensor` | `bool` | `false` | Whether to enable XTensor for model weights with the physical page pool. |
 | `phy_page_granularity_size` | `int64` | `2097152` | Granularity size of one physical page in bytes, default 2 MiB, for continuous KV Cache. |
 
 ## KVCacheStoreConfig
@@ -105,7 +104,6 @@ xLLM uses gflags to manage service startup parameters. `--model <PATH>` is the o
 | `enable_beam_search_kernel` | `bool` | `false` | Whether to enable the beam search kernel. |
 | `beam_width` | `int32` | `1` | Beam width for beam search. |
 | `enable_block_copy_kernel` | `bool` | `true` (NPU/CUDA/MUSA/DCU); `false` (other backends) | Whether to use the block copy kernel on supported backends. |
-| `enable_topk_sorted` | `bool` | `true` | Whether to enable sorted top-k output. |
 
 ## SchedulerConfig
 
@@ -113,6 +111,7 @@ xLLM uses gflags to manage service startup parameters. `--model <PATH>` is the o
 |:----------|:-----|:--------|:------------|
 | `max_tokens_per_batch` | `int32` | `10240` | Maximum number of tokens per batch. |
 | `max_seqs_per_batch` | `int32` | `200` | Maximum number of sequences per batch. |
+| `request_queue_size` | `int32` | `100000` | Scheduler request queue size. |
 | `enable_schedule_overlap` | `bool` | `false` | Whether to enable schedule overlap, also known as asynchronous scheduling. See [Async Scheduling](/en/features/async_schedule/). |
 | `prefill_scheduling_memory_usage_threshold` | `double` | `0.95` | Memory usage threshold during prefill scheduling. |
 | `decode_reserved_tokens_per_request` | `int32` | `512` | PD decode only. Tokens of growth kept free per admitted decode request when admitting new requests or restoring preempted ones; 0 disables the reserve. Linear-state and embedding slots are not counted. |
@@ -161,7 +160,6 @@ xLLM uses gflags to manage service startup parameters. `--model <PATH>` is the o
 | Parameter | Type | Default | Description |
 |:----------|:-----|:--------|:------------|
 | `master_node_addr` | `string` | `"127.0.0.1:19888"` | Master address for multi-node distributed serving, for example `10.18.1.1:9999`. |
-| `xtensor_master_node_addr` | `string` | `"127.0.0.1:19889"` | Master address for the XTensor distributed service, for example `10.18.1.1:9999`. |
 | `nnodes` | `int32` | `1` | Number of multi-node nodes. |
 | `node_rank` | `int32` | `0` | Rank of the current node. |
 | `etcd_addr` | `string` | `""` | etcd address used to save instance metadata. |
@@ -176,7 +174,6 @@ xLLM uses gflags to manage service startup parameters. `--model <PATH>` is the o
 | Parameter | Type | Default | Description |
 |:----------|:-----|:--------|:------------|
 | `enable_disagg_pd` | `bool` | `false` | Whether to enable disaggregated prefill and decode execution. See [P-D Separation](/en/features/disagg_pd/). |
-| `enable_pd_ooc` | `bool` | `false` | Whether to enable online-offline co-location in disaggregated PD mode. |
 | `disagg_pd_port` | `int32` | `7777` | Listening port for the disaggregated PD bRPC server. |
 | `instance_role` | `string` | `"DEFAULT"` | Instance role, for example `DEFAULT`, `PREFILL`, `DECODE`, or `MIX`. |
 | `kv_cache_transfer_mode` | `string` | `"PUSH"` | KV Cache transfer mode, for example `PUSH` or `PULL`. |
@@ -287,21 +284,3 @@ DeepSeek-V4.1's separate PCP path (`cp_size>1`) is currently unsupported.
 | `dit_sparse_attention_sparse_start_step` | `int64` | `0` | Sparse attention step index to start sparse attention. Steps before this use dense attention. |
 | `dit_sparse_attention_version` | `string` | `"rain_fusion"` | Sparse attention version: `rain_fusion` (frame-pairing + `aclnnRainFusionAttention`) or `sparse_attention` (block-decompose + `aclnnBlockSparseAttention`). |
 | `dit_sparse_attention_mask_refresh_steps` | `int64` | `1` | Recompute the block sparse mask every N diffusion steps. `1` means every step, higher values reuse the mask longer. |
-
-## RecConfig
-
-| Parameter | Type | Default | Description |
-|:----------|:-----|:--------|:------------|
-| `enable_rec_fast_sampler` | `bool` | `true` | Whether to enable the RecSampler fast sampling path for Rec pipelines. |
-| `enable_rec_prefill_only` | `bool` | `false` | Whether to enable Rec prefill-only mode without decoder self-attention block allocation. |
-| `enable_xattention_one_stage` | `bool` | `false` | Whether to force xattention one-stage decode for Rec multi-round mode. |
-| `max_decode_rounds` | `int32` | `0` | Maximum number of decode rounds for multi-step decoding. `0` means disabled. |
-| `enable_constrained_decoding` | `bool` | `false` | Whether to enable constrained decoding with predefined rules for output format or structure. |
-| `output_rec_logprobs` | `bool` | `false` | Whether to output Rec multi-round token-aligned logprobs. Missing per-token logprobs are filled with the final beam logprob. |
-| `enable_convert_tokens_to_item` | `bool` | `false` | Whether to convert token IDs to item IDs in REC/OneRec responses. |
-| `enable_output_sku_logprobs` | `bool` | `false` | Whether to output REC/OneRec token-aligned logprobs tensors. |
-| `enable_extended_item_info` | `bool` | `false` | Whether to parse and output REC extended item info tensors. |
-| `each_conversion_threshold` | `int32` | `50` | Maximum number of items emitted for each REC token triplet. |
-| `total_conversion_threshold` | `int32` | `1000` | Maximum total number of items emitted in one REC response. |
-| `request_queue_size` | `int32` | `100000` | Scheduler request queue size. |
-| `rec_worker_max_concurrency` | `uint32` | `1` | Concurrency for Rec worker parallel execution. Values less than or equal to `1` disable concurrent Rec workers. |

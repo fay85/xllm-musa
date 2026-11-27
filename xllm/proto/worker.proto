@@ -76,23 +76,11 @@ message SleepRequest {
 
 message WakeupRequest {
   MasterStatus master_status = 1;
-  repeated string remote_addrs = 2;
-  // Per-remote-addr weight segments (index matches remote_addrs)
-  // Each entry contains ordered segments to pull from that remote source
-  repeated WakeupWeightSegmentList src_weight_segments = 3;
+  reserved 2, 3;
+  reserved "remote_addrs", "src_weight_segments";
 }
 
 // A single weight segment for P2P transfer
-message WakeupWeightSegment {
-  uint64 offset = 1;  // Byte offset from source GlobalXTensor base
-  uint64 size = 2;    // Segment size in bytes
-}
-
-// List of weight segments for one remote source
-message WakeupWeightSegmentList {
-  repeated WakeupWeightSegment segments = 1;
-}
-
 // RL deep-sleep weight update: reload weights in place from disk.
 message UpdateWeightsRequest {
   // Checkpoint path to reload from. Empty means reuse the original model path.
@@ -119,10 +107,6 @@ message LoadLoraAdapterRequest {
 // in LoRARegistry).
 message UnloadLoraAdapterRequest {
   string lora_name = 1;
-}
-
-message P2PLinkWorkerRequest {
-  string remote_addr = 1;
 }
 
 message PullKVCacheRequest {
@@ -213,9 +197,8 @@ message TransferKVInfo {
   string request_id = 1;
   int32 dp_rank = 4;
   InstanceInfo remote_instance_info = 5;
-  // XTensor mode: destination offsets from D-node (per-layer)
-  // Each XTensorLayerOffsets contains K/V offsets for all blocks at one layer
-  repeated XTensorLayerOffsets dst_xtensor_layer_offsets = 6;
+  reserved 6;
+  reserved "dst_xtensor_layer_offsets";
   repeated KVTransferMapping mappings = 22;
 }
 
@@ -363,10 +346,6 @@ message ForwardInput {
   PackedForwardInput packed_input = 100;
 }
 
- message BatchedForwardInputs {
-   repeated ForwardInput micro_inputs = 1;
- }
-
 message Embeddings {
   repeated float vals = 1;
 }
@@ -445,8 +424,6 @@ service DistributeWorker {
   rpc GetCacheInfo(Empty) returns (CacheInfo) {}
   rpc LinkCluster(ClusterInfo) returns (Status) {}
   rpc UnlinkCluster(ClusterInfo) returns (Status) {}
-  rpc LinkP2P(P2PLinkWorkerRequest) returns (Status) {}
-  rpc UnlinkP2P(P2PLinkWorkerRequest) returns (Status) {}
   rpc ExecuteModel (ForwardInput) returns (ForwardOutput);
   rpc GetLastStepResult (Empty) returns (ForwardOutput);
   rpc GetActiveActivationMemory (Empty) returns (ActivationMemory);

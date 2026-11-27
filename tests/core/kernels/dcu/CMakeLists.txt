@@ -81,18 +81,6 @@ cc_test(
 )
 cc_test(
   NAME
-    air_log_softmax_dcu_test
-  SRCS
-    air_log_softmax_test.cpp
-  DEPS
-    :dcu_kernels
-    hip::host
-    torch
-    GTest::gtest_main
-    glog::glog
-)
-cc_test(
-  NAME
     reshape_paged_cache_dcu_test
   SRCS
     reshape_paged_cache_test.cpp

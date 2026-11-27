@@ -37,7 +37,6 @@ cc_library(
     npu_recurrent_gated_delta_rule.cpp
     utils.cpp
     w4a8_dynamic_moe_preprocess.cpp
-    rec_constrained_topk.cpp
     npu_ops_library.cpp
   DEPS
     :torch_npu_kernels

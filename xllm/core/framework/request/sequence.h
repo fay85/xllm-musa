@@ -44,7 +44,6 @@ limitations under the License.
 #include "finish_reason.h"
 #include "framework/block/block.h"
 #include "incremental_decoder.h"
-#include "rec_type.h"
 #include "request_output.h"
 #include "sample_slot.h"
 #include "sequence_kv_state.h"
@@ -117,8 +116,6 @@ struct SequenceParams {
   bool enable_schedule_overlap = false;
 
   bool is_graph_warmup = false;
-
-  RecType rec_type = RecType::kNone;
 
   int32_t bos_token_id = 0;
 
@@ -389,7 +386,6 @@ class Sequence final {
   }
   // check finish status, use cached value if not invalidated
   bool finished() const;
-  // mark sequence as finished (used by rec model multi-round decoding)
   void finish();
   void fail(Status status);
 
@@ -565,34 +561,6 @@ class Sequence final {
   // re-evaluated from current tokens.
   void reset_finish_state_for_beam_search();
 
-  // Multi-round beam search result caching
-  void set_beam_result(int32_t bw,
-                       int32_t total_rounds,
-                       const std::vector<std::vector<int32_t>>& flat,
-                       const std::vector<float>& last_logprobs) {
-    beam_width_cached_ = bw;
-    total_rounds_cached_ = total_rounds;
-    beam_seq_group_flat_ = flat;
-    beam_last_logprobs_ = last_logprobs;
-    // Device-internal rounds are returned together, without first/last local
-    // generation events. A prior single token cannot prove complete Decode.
-    if (sequence_params_.request_timing) {
-      sequence_params_.request_timing->mark_generation_events_incomplete();
-    }
-  }
-  bool has_beam_result() const {
-    return beam_width_cached_ > 0 && total_rounds_cached_ > 0 &&
-           !beam_seq_group_flat_.empty();
-  }
-  const std::vector<std::vector<int32_t>>& beam_seq_group_flat() const {
-    return beam_seq_group_flat_;
-  }
-  const std::vector<float>& beam_last_logprobs() const {
-    return beam_last_logprobs_;
-  }
-  int32_t beam_width_cached() const { return beam_width_cached_; }
-  int32_t total_rounds_cached() const { return total_rounds_cached_; }
-
   LogprobState* logprob_state() { return &logprob_state_; }
   void set_estimated_latency(double estimated_latency) {
     estimated_latency_ = estimated_latency;
@@ -605,31 +573,6 @@ class Sequence final {
 
   // get sequence id
   int32_t seq_id() const { return seq_id_; }
-
-  const std::vector<int32_t>& encoder_tokens() const {
-    static const std::vector<int32_t> kEmpty;
-    if (!onerec_state_.has_value()) {
-      return kEmpty;
-    }
-    return onerec_state_->encoder_tokens;
-  }
-
-  size_t encoder_seq_len() const {
-    return onerec_state_.has_value() ? onerec_state_->num_encoder_tokens : 0;
-  }
-
-  size_t num_decoder_embeddings() const {
-    return onerec_state_.has_value() ? onerec_state_->num_decoder_embeddings
-                                     : 0;
-  }
-
-  RecType rec_type() const { return sequence_params_.rec_type; }
-  bool is_onerec_model() const {
-    return sequence_params_.rec_type == RecType::kOneRec;
-  }
-
-  static const std::string ENCODER_SPARSE_EMBEDDING_NAME;
-  static const std::string DECODER_CONTEXT_EMBEDDING_NAME;
 
   void set_cancel() { cancelled_.store(true, std::memory_order_relaxed); }
 
@@ -669,23 +612,6 @@ class Sequence final {
                        SequenceOutput& output) const;
   torch::Tensor generate_mm_embeddings_tags(const ModelArgs& model_args) const;
 
-  void init_onerec_sequence(const std::vector<int32_t>& prompt_token_ids,
-                            torch::Tensor input_embedding);
-
-  void generate_onerec_streaming_output(const Slice<int32_t>& ids,
-                                        size_t size,
-                                        SequenceOutput& output) const;
-
-  void generate_onerec_output(const Slice<int32_t>& ids,
-                              size_t size,
-                              const Tokenizer& tokenizer,
-                              SequenceOutput& output) const;
-
-  struct OneRecState {
-    size_t num_encoder_tokens = 0;
-    size_t num_decoder_embeddings = 0;
-    std::vector<int32_t> encoder_tokens;
-  };
   int32_t wait_time_ms_ = 0;
   double estimated_latency_ = 0.0;
 
@@ -785,8 +711,6 @@ class Sequence final {
 
   std::optional<size_t> linear_prefix_checkpoint_;
 
-  std::optional<OneRecState> onerec_state_;
-
   std::shared_ptr<JsonObjectGrammarState> json_object_state_;
   std::shared_ptr<ConstraintStateMachine> constraint_machine_;
   std::unique_ptr<XGrammarState> xgrammar_state_;
@@ -841,12 +765,6 @@ class Sequence final {
 
   // whether the last token is handled
   std::atomic<bool> last_token_handled_{false};
-
-  // Multi-round beam search result caching
-  int32_t beam_width_cached_ = 0;
-  int32_t total_rounds_cached_ = 0;
-  std::vector<std::vector<int32_t>> beam_seq_group_flat_;
-  std::vector<float> beam_last_logprobs_;
 
   // Mark whether the sequence has new token updates in current decode step.
   // This is only consumed by software beam search to distinguish:

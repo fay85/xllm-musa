@@ -643,7 +643,7 @@ class LlmForCausalLMImplBase : public torch::nn::Module {
           << "Failed to determine max decoder layer storage_size";
 
       rolling_weight_buffer_ = std::make_shared<layer::RollingWeightBuffer>(
-          num_cached_slots, max_storage_size, model_id);
+          num_cached_slots, max_storage_size);
       rolling_load_manager_ =
           std::make_unique<RollingLoadManager>(loaders,
                                                rolling_weight_buffer_,

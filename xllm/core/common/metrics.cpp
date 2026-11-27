@@ -135,8 +135,7 @@ DEFINE_HISTOGRAM(encoder_cache_hit_rate,
                  "Histogram of encoder cache hit rate in percent");
 
 // Resident blocks/state slots, including evictable prefixes. Host copies use
-// their own manager. XTensor follows its existing used count
-// (padding/reserves).
+// their own manager.
 bvar::MultiDimension<bvar::Status<double>>
     MULTI_GAUGE_kv_cache_pool_occupied_resources(
         "kv_cache_pool_occupied_resources",
@@ -447,8 +446,7 @@ DEFINE_MULTI_HISTOGRAM(xllm_pd_request_decode_microseconds,
                        "role",
                        "Successful PD Decode local received-token-to-last-core-"
                        "output latency in microseconds, including local "
-                       "preparation and scheduling waits; final local segment "
-                       "only for OOC migration");
+                       "preparation and scheduling waits");
 DEFINE_MULTI_HISTOGRAM(xllm_pd_request_tpot_microseconds,
                        "role",
                        "PD local Decode duration per newly committed local "
@@ -541,25 +539,8 @@ DEFINE_COUNTER(proto_latency_seconds_o2proto,
 DEFINE_COUNTER(prepare_input_latency_seconds,
                "Latency of preparing input in seconds");
 
-// rec engine metrics
-DEFINE_HISTOGRAM(rec_total_latency_microseconds,
-                 "Latency of rec engine in microseconds");
 DEFINE_HISTOGRAM(prepare_input_latency_microseconds,
                  "Latency of preparing input in microseconds");
-DEFINE_HISTOGRAM(rec_first_token_latency_microseconds,
-                 "Latency of rec first token generation in microseconds");
-DEFINE_HISTOGRAM(rec_second_token_latency_microseconds,
-                 "Latency of rec second token generation in microseconds");
-DEFINE_HISTOGRAM(rec_third_token_latency_microseconds,
-                 "Latency of rec third token generation in microseconds");
-DEFINE_HISTOGRAM(rec_sampling_latency_microseconds,
-                 "Latency of rec sampling in microseconds");
-
-DEFINE_GAUGE(rec_beam_search_width, "rec beam search width");
-
-DEFINE_HISTOGRAM(rec_input_token_num_per_request,
-                 "Histogram of input token number per request in rec engine");
-
 // multi node metrics
 DEFINE_COUNTER(worker_service_latency_seconds,
                "Worker service execution latency in seconds");

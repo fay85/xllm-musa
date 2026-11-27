@@ -50,6 +50,8 @@ DEFINE_int32(decode_reserved_tokens_per_request,
              "request when admitting new requests or restoring preempted "
              "ones. 0 disables the reserve.");
 
+DEFINE_int32(request_queue_size, 100000, "Scheduler request queue size.");
+
 DEFINE_bool(enable_chunked_prefill, true, "Whether to enable chunked prefill.");
 
 DEFINE_int32(max_tokens_per_chunk_for_prefill,
@@ -108,6 +110,7 @@ void SchedulerConfig::from_flags() {
   XLLM_CONFIG_ASSIGN_FROM_FLAG(dp_cache_threshold);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(max_tokens_per_batch);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(max_seqs_per_batch);
+  XLLM_CONFIG_ASSIGN_FROM_FLAG(request_queue_size);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_schedule_overlap);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(prefill_scheduling_memory_usage_threshold);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(decode_reserved_tokens_per_request);
@@ -131,6 +134,7 @@ void SchedulerConfig::from_json(const JsonReader& json) {
   XLLM_CONFIG_ASSIGN_FROM_JSON(dp_cache_threshold);
   XLLM_CONFIG_ASSIGN_FROM_JSON(max_tokens_per_batch);
   XLLM_CONFIG_ASSIGN_FROM_JSON(max_seqs_per_batch);
+  XLLM_CONFIG_ASSIGN_FROM_JSON(request_queue_size);
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_schedule_overlap);
   XLLM_CONFIG_ASSIGN_FROM_JSON(prefill_scheduling_memory_usage_threshold);
   XLLM_CONFIG_ASSIGN_FROM_JSON(decode_reserved_tokens_per_request);
@@ -161,6 +165,8 @@ void SchedulerConfig::append_config_json(
       config_json, default_config, max_tokens_per_batch);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, max_seqs_per_batch);
+  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
+      config_json, default_config, request_queue_size);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, enable_schedule_overlap);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(

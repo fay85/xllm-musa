@@ -13,14 +13,12 @@ cc_library(
     zero_eviction_scheduler.h
     continuous_scheduler.h
     disagg_pd_scheduler.h
-    pd_ooc_scheduler.h
     async_response_processor.h
     scheduler.h
     dit_scheduler.h
     scheduler_factory.h
     request_priority_queue.h
     perf_model.h
-    fixed_steps_scheduler.h
   SRCS
     scheduler_policy.cpp
     linear_prefix_admission_policy.cpp
@@ -31,12 +29,10 @@ cc_library(
     zero_eviction_scheduler.cpp
     continuous_scheduler.cpp
     disagg_pd_scheduler.cpp
-    pd_ooc_scheduler.cpp
     async_response_processor.cpp
     dit_scheduler.cpp
     scheduler_factory.cpp
     perf_model.cpp
-    fixed_steps_scheduler.cpp
   DEPS
     :batch
     :distributed_runtime

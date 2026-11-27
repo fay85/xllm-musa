@@ -64,22 +64,6 @@ void DisaggPDService::FirstGeneration(
   disagg_pd_service_impl_->decode_recv_first_generation(request, response);
 }
 
-void DisaggPDService::MultiGenerations(
-    ::google::protobuf::RpcController* controller,
-    const proto::DisaggGenerationsRequests* request,
-    proto::Status* response,
-    ::google::protobuf::Closure* done) {
-  LOG(FATAL) << "MultiGenerations is not supported in DisaggPDService";
-}
-
-void DisaggPDService::SendPullSignal(
-    ::google::protobuf::RpcController* controller,
-    const proto::PullSignal* request,
-    proto::Status* response,
-    ::google::protobuf::Closure* done) {
-  LOG(FATAL) << "SendPullSignal is not supported in DisaggPDService";
-}
-
 void DisaggPDService::LinkInstance(
     ::google::protobuf::RpcController* controller,
     const proto::InstanceClusterInfo* request,

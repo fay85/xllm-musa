@@ -132,9 +132,6 @@ class KVCacheManager {
   // Returns 0 for single-rank or non-pool managers.
   virtual int32_t select_dp_rank() const { return 0; }
 
-  // Reserve XTensor padding blocks after KV tensors are created.
-  virtual void reserve_xtensor_padding_blocks() {}
-
  protected:
   KVCacheManager() = default;
 

@@ -15,7 +15,6 @@ cc_library(
     chat_json_parser.h
     completion_json_parser.h
     completion_service_impl.h
-    rec_completion_service_impl.h
     chat_service_impl.h
     anthropic_service_impl.h
     anthropic_stream_utils.h
@@ -48,7 +47,6 @@ cc_library(
     request_admission.cpp
     rpc_request_metrics.cpp
     completion_service_impl.cpp
-    rec_completion_service_impl.cpp
     chat_service_impl.cpp
     anthropic_service_impl.cpp
     anthropic_stream_utils.cpp

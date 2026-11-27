@@ -60,7 +60,7 @@ xLLM 使用 gflags 管理服务启动参数。`--model <PATH>` 是唯一必填�
 
 | 参数名称 | 类型 | 默认值 | 参数含义 |
 |:---------|:-----|:-------|:---------|
-| `enable_manual_loader` | `bool` | `false` | 将 decoder layer 权重固定在 host 内存并使用异步 H2D 传输；`enable_rolling_load` 依赖该参数，`enable_xtensor` 也会隐式启用该能力。 |
+| `enable_manual_loader` | `bool` | `false` | 将 decoder layer 权重固定在 host 内存并使用异步 H2D 传输；`enable_rolling_load` 依赖该参数。 |
 | `enable_rolling_load` | `bool` | `false` | 启用 rolling weight load：HBM 中仅保留 N 个 decoder layer 权重槽位，并按层即时加载；需要 `enable_manual_loader=true`，仅 NPU 支持。 |
 | `rolling_load_num_cached_layers` | `int32` | `2` | `enable_rolling_load=true` 时 HBM 中保留的 decoder layer 权重槽位数量。 |
 | `rolling_load_num_rolling_slots` | `int32` | `-1` | decoder rolling load 使用的 rolling 槽位数量；固定槽位数为 `rolling_load_num_cached_layers - rolling_load_num_rolling_slots`。`-1` 表示自动设置为 `min(2, preload_count)`，取值需在 `[-1, rolling_load_num_cached_layers]` 范围内。 |
@@ -79,7 +79,6 @@ xLLM 使用 gflags 管理服务启动参数。`--model <PATH>` 是唯一必填�
 | `enable_in_batch_prefix_cache` | `bool` | `false` | 是否将已准入的 prefill 完整 block 缓存进 prefix cache，使同一 batch 内的后续请求可以共享。 |
 | `max_linear_state_cache_slots` | `int64` | `0` | linear-attention state cache 的最大活跃槽位数；`0` 表示根据可用 KV Cache 预算自动推导容量。 |
 | `xxh3_128bits_seed` | `uint32` | `1024` | XXH3 128-bit 哈希的默认 seed。 |
-| `enable_xtensor` | `bool` | `false` | 是否为模型权重启用基于物理页池的 XTensor。 |
 | `phy_page_granularity_size` | `int64` | `2097152` | 单个物理页的粒度大小，单位 byte，默认 2 MiB；用于连续 KV Cache。 |
 
 ## KVCacheStoreConfig
@@ -105,7 +104,6 @@ xLLM 使用 gflags 管理服务启动参数。`--model <PATH>` 是唯一必填�
 | `enable_beam_search_kernel` | `bool` | `false` | 是否启用 beam search kernel。 |
 | `beam_width` | `int32` | `1` | Beam search 的 beam width。 |
 | `enable_block_copy_kernel` | `bool` | `true`（NPU/CUDA/MUSA/DCU）；`false`（其他后端） | 是否在支持的后端使用 block copy kernel。 |
-| `enable_topk_sorted` | `bool` | `true` | 是否启用 top-k 结果排序输出。 |
 
 ## SchedulerConfig
 
@@ -113,6 +111,7 @@ xLLM 使用 gflags 管理服务启动参数。`--model <PATH>` 是唯一必填�
 |:---------|:-----|:-------|:---------|
 | `max_tokens_per_batch` | `int32` | `10240` | 每个 batch 可处理的最大 token 数。 |
 | `max_seqs_per_batch` | `int32` | `200` | 每个 batch 可处理的最大 sequence 数。 |
+| `request_queue_size` | `int32` | `100000` | scheduler request queue 大小。 |
 | `enable_schedule_overlap` | `bool` | `false` | 是否启用 schedule overlap（异步调度）；详见 [异步调度](/zh/features/async_schedule/)。 |
 | `prefill_scheduling_memory_usage_threshold` | `double` | `0.95` | prefill 调度时的内存使用阈值。 |
 | `decode_reserved_tokens_per_request` | `int32` | `512` | 仅 PD decode 生效。准入新请求或恢复被抢占请求时，为每个已准入的 decode 请求预留的后续生成 token 数；0 表示不预留。不计入线性状态和 embedding slot。 |
@@ -161,7 +160,6 @@ xLLM 使用 gflags 管理服务启动参数。`--model <PATH>` 是唯一必填�
 | 参数名称 | 类型 | 默认值 | 参数含义 |
 |:---------|:-----|:-------|:---------|
 | `master_node_addr` | `string` | `"127.0.0.1:19888"` | 多机分布式服务的 master 地址，例如 `10.18.1.1:9999`。 |
-| `xtensor_master_node_addr` | `string` | `"127.0.0.1:19889"` | XTensor 分布式服务的 master 地址，例如 `10.18.1.1:9999`。 |
 | `nnodes` | `int32` | `1` | 多机节点数量。 |
 | `node_rank` | `int32` | `0` | 当前节点 rank。 |
 | `etcd_addr` | `string` | `""` | 保存实例元信息的 etcd 地址。 |
@@ -176,7 +174,6 @@ xLLM 使用 gflags 管理服务启动参数。`--model <PATH>` 是唯一必填�
 | 参数名称 | 类型 | 默认值 | 参数含义 |
 |:---------|:-----|:-------|:---------|
 | `enable_disagg_pd` | `bool` | `false` | 是否启用 Prefill-Decode 分离执行；详见 [PD 分离](/zh/features/disagg_pd/)。 |
-| `enable_pd_ooc` | `bool` | `false` | 是否在 PD 分离模式下启用在线/离线混部。 |
 | `disagg_pd_port` | `int32` | `7777` | PD 分离 bRPC server 的监听端口。 |
 | `instance_role` | `string` | `"DEFAULT"` | 当前实例角色，例如 `DEFAULT`、`PREFILL`、`DECODE`、`MIX`。 |
 | `kv_cache_transfer_mode` | `string` | `"PUSH"` | KV Cache 传输模式，例如 `PUSH`、`PULL`。 |
@@ -285,21 +282,3 @@ DeepSeek-V4.1 的另一套 PCP 路径（`cp_size>1`）目前尚未支持。
 | `dit_sparse_attention_sparse_start_step` | `int64` | `0` | 开始使用 sparse attention 的 step 索引；此前的 step 使用 dense attention。 |
 | `dit_sparse_attention_version` | `string` | `"rain_fusion"` | sparse attention 版本：`rain_fusion`（frame-pairing + `aclnnRainFusionAttention`）或 `sparse_attention`（block-decompose + `aclnnBlockSparseAttention`）。 |
 | `dit_sparse_attention_mask_refresh_steps` | `int64` | `1` | 每 N 个 diffusion step 重新计算一次 block sparse mask；`1` 表示每步都算，值越大 mask 复用越久。 |
-
-## RecConfig
-
-| 参数名称 | 类型 | 默认值 | 参数含义 |
-|:---------|:-----|:-------|:---------|
-| `enable_rec_fast_sampler` | `bool` | `true` | 是否为 Rec pipeline 启用 RecSampler fast sampling path。 |
-| `enable_rec_prefill_only` | `bool` | `false` | 是否启用 Rec prefill-only 模式，不分配 decoder self-attention blocks。 |
-| `enable_xattention_one_stage` | `bool` | `false` | 是否在 Rec multi-round 模式下强制使用 xattention one-stage decode。 |
-| `max_decode_rounds` | `int32` | `0` | multi-step decoding 的最大 decode round 数；`0` 表示禁用。 |
-| `enable_constrained_decoding` | `bool` | `false` | 是否启用 constrained decoding，用预定义规则约束输出格式或结构。 |
-| `output_rec_logprobs` | `bool` | `false` | 是否输出 Rec multi-round token-aligned logprobs；启用后缺失的 per-token logprobs 会用最终 beam logprob 填充。 |
-| `enable_convert_tokens_to_item` | `bool` | `false` | 是否在 REC/OneRec response 中将 token ids 转换为 item id。 |
-| `enable_output_sku_logprobs` | `bool` | `false` | 是否输出 REC/OneRec token-aligned logprobs tensor。 |
-| `enable_extended_item_info` | `bool` | `false` | 是否解析并输出 REC extended item info tensors。 |
-| `each_conversion_threshold` | `int32` | `50` | 每个 REC token triplet 最多输出的 item 数。 |
-| `total_conversion_threshold` | `int32` | `1000` | 单个 REC response 最多输出的 item 总数。 |
-| `request_queue_size` | `int32` | `100000` | scheduler request queue 大小。 |
-| `rec_worker_max_concurrency` | `uint32` | `1` | Rec worker 并行执行并发度；小于等于 `1` 表示禁用并发 Rec worker。 |

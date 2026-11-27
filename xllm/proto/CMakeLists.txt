@@ -6,7 +6,6 @@ proto_library(
   SRCS
     tensor.proto
     common.proto
-    rec.proto
     completion.proto
     sample.proto
     chat.proto
@@ -29,5 +28,4 @@ proto_library(
     mooncake_transfer_engine.proto
     embedding_data.proto
     anthropic.proto
-    xtensor_dist.proto
 )

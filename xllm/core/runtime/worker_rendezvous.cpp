@@ -20,23 +20,12 @@ limitations under the License.
 #include <cstddef>
 
 #include "framework/kv_cache_transfer/kv_cache_transfer.h"
-#if defined(USE_NPU)
-#include "framework/kv_cache_transfer/mooncake_weight_transfer.h"
-#endif
 
 namespace xllm {
 
-#if defined(USE_NPU)
-WorkerRendezvous::WorkerRendezvous(
-    const std::shared_ptr<KVCacheTransfer>& kv_cache_transfer,
-    const std::unique_ptr<MooncakeWeightTransfer>& weight_transfer)
-    : kv_cache_transfer_(kv_cache_transfer),
-      weight_transfer_(weight_transfer) {}
-#else
 WorkerRendezvous::WorkerRendezvous(
     const std::shared_ptr<KVCacheTransfer>& kv_cache_transfer)
     : kv_cache_transfer_(kv_cache_transfer) {}
-#endif
 
 bool WorkerRendezvous::link_cluster(const std::vector<uint64_t>& cluster_ids,
                                     const std::vector<std::string>& addrs,
@@ -78,32 +67,6 @@ bool WorkerRendezvous::unlink_cluster(const std::vector<uint64_t>& cluster_ids,
   }
 #endif
   return true;
-}
-
-bool WorkerRendezvous::link_p2p(const std::string& remote_addr) {
-#if defined(USE_NPU)
-  if (!weight_transfer_) {
-    LOG(ERROR) << "MooncakeWeightTransfer not initialized";
-    return false;
-  }
-  return weight_transfer_->link_p2p(remote_addr);
-#else
-  LOG(ERROR) << "link_p2p requires USE_NPU build";
-  return false;
-#endif
-}
-
-bool WorkerRendezvous::unlink_p2p(const std::string& remote_addr) {
-#if defined(USE_NPU)
-  if (!weight_transfer_) {
-    LOG(ERROR) << "MooncakeWeightTransfer not initialized";
-    return false;
-  }
-  return weight_transfer_->unlink_p2p(remote_addr);
-#else
-  LOG(ERROR) << "unlink_p2p requires USE_NPU build";
-  return false;
-#endif
 }
 
 bool WorkerRendezvous::validate_cluster_endpoints(

@@ -52,7 +52,7 @@ cc_test(
   DEPS :distributed_runtime :xllm_server :batch :block GTest::gtest_main
 )
 target_link_libraries(llm_engine_host_transfer_test PRIVATE
-  :xtensor :xllm_server :batch :block)
+  :xllm_server :batch :block)
 
 # Pins the decode admission failure status: only a structured-output
 # constraint rebuild failure reports the permanent 422, every other nullptr

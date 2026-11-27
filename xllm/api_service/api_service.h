@@ -30,7 +30,6 @@ limitations under the License.
 #include "image_generation_service_impl.h"
 #include "models_service_impl.h"
 #include "qwen3_rerank_service_impl.h"
-#include "rec_completion_service_impl.h"
 #include "rerank_service_impl.h"
 #include "sample_service_impl.h"
 #include "speech_to_text_service_impl.h"
@@ -187,16 +186,6 @@ class APIService : public proto::XllmAPIService {
                              proto::HttpResponse* response,
                              ::google::protobuf::Closure* done) override;
 
-  void ForkMaster(::google::protobuf::RpcController* controller,
-                  const proto::MasterInfos* request,
-                  proto::Status* response,
-                  ::google::protobuf::Closure* done) override;
-
-  void ForkMasterHttp(::google::protobuf::RpcController* controller,
-                      const proto::HttpRequest* request,
-                      proto::HttpResponse* response,
-                      ::google::protobuf::Closure* done) override;
-
   void Sleep(::google::protobuf::RpcController* controller,
              const proto::MasterInfos* request,
              proto::Status* response,
@@ -244,26 +233,6 @@ class APIService : public proto::XllmAPIService {
                             proto::HttpResponse* response,
                             ::google::protobuf::Closure* done) override;
 
-  void LinkP2P(::google::protobuf::RpcController* controller,
-               const proto::P2PLinkRequest* request,
-               proto::Status* response,
-               ::google::protobuf::Closure* done) override;
-
-  void LinkP2PHttp(::google::protobuf::RpcController* controller,
-                   const proto::HttpRequest* request,
-                   proto::HttpResponse* response,
-                   ::google::protobuf::Closure* done) override;
-
-  void UnlinkP2P(::google::protobuf::RpcController* controller,
-                 const proto::P2PLinkRequest* request,
-                 proto::Status* response,
-                 ::google::protobuf::Closure* done) override;
-
-  void UnlinkP2PHttp(::google::protobuf::RpcController* controller,
-                     const proto::HttpRequest* request,
-                     proto::HttpResponse* response,
-                     ::google::protobuf::Closure* done) override;
-
   // Async RL training support: pause/resume
   void Pause(::google::protobuf::RpcController* controller,
              const proto::PauseRequest* request,
@@ -299,8 +268,6 @@ class APIService : public proto::XllmAPIService {
 
   void register_chat_completions_handler();
 
-  bool ParseForkMasterRequest(const proto::MasterInfos* request,
-                              Options& options);
   void set_model_master(const std::string& model_id, Master* master);
   bool has_model_master(const std::string& model_id) const;
   bool add_model_master_if_absent(const std::string& model_id, Master* master);
@@ -310,8 +277,6 @@ class APIService : public proto::XllmAPIService {
   // Each returns true on success. On failure, the human readable reason is
   // written to `error_message` so the caller can either set the HTTP response
   // body or call `brpc::Controller::SetFailed`.
-  bool do_fork_master(const proto::MasterInfos& request,
-                      std::string* error_message);
   bool do_sleep(const proto::MasterInfos& request, std::string* error_message);
   bool do_wakeup(const proto::MasterInfos& request, std::string* error_message);
 
@@ -338,7 +303,6 @@ class APIService : public proto::XllmAPIService {
   std::unique_ptr<TextGenerationServiceImpl> text_generation_service_impl_;
   std::unique_ptr<VideoGenerationServiceImpl> video_generation_service_impl_;
   std::unique_ptr<RerankServiceImpl> rerank_service_impl_;
-  std::unique_ptr<RecCompletionServiceImpl> rec_completion_service_impl_;
 };
 
 }  // namespace xllm

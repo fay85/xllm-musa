@@ -105,8 +105,6 @@ class Request : public RequestBase {
 
   bool last_token_handled() const { return state_.handle_last_token_done; }
 
-  size_t total_num_blocks();
-
   void set_preempted() {
     state_.preempted = true;
     for (const auto& sequence : sequences()) {

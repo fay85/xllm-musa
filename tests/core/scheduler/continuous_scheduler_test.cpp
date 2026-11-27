@@ -21,7 +21,6 @@
 #include "common/metrics.h"
 #include "core/framework/config/kv_cache_config.h"
 #include "core/framework/config/parallel_config.h"
-#include "core/framework/config/rec_config.h"
 #include "core/framework/config/scheduler_config.h"
 #include "core/framework/config/speculative_config.h"
 #include "core/scheduler/scheduler_test_adapter.h"
@@ -954,8 +953,6 @@ class CancelledOverlapEngine final : public FakeEngine {
 TEST(EnginePrefixCacheTest, DecodeLinearKeepsKvPrefixesAndReceiving) {
   ScopedConfigValue<bool> global_prefix_cache(
       KVCacheConfig::get_instance().enable_prefix_cache(), true);
-  ScopedConfigValue<bool> xtensor(
-      KVCacheConfig::get_instance().enable_xtensor(), false);
   FakeEngine engine(32, 4, true, true, InstanceRole::DECODE);
   BlockManagerPool* pool = engine.block_manager_pool();
   EXPECT_TRUE(pool->options().enable_prefix_cache());
@@ -1003,8 +1000,6 @@ TEST(EnginePrefixCacheTest, DecodeLinearKeepsKvPrefixesAndReceiving) {
 }
 
 TEST(EnginePrefixCacheTest, LinearPrefillAndMixedRolesKeepRequestedSetting) {
-  ScopedConfigValue<bool> xtensor(
-      KVCacheConfig::get_instance().enable_xtensor(), false);
   FakeEngine engine(32, 4, false, true);
   for (const InstanceRole role :
        {InstanceRole::DEFAULT, InstanceRole::PREFILL, InstanceRole::MIX}) {
@@ -1020,8 +1015,6 @@ TEST(EnginePrefixCacheTest, LinearPrefillAndMixedRolesKeepRequestedSetting) {
 }
 
 TEST(EnginePrefixCacheTest, ImplicitLinearLayersKeepDecodePrefixCache) {
-  ScopedConfigValue<bool> xtensor(
-      KVCacheConfig::get_instance().enable_xtensor(), false);
   FakeEngine engine(32, 4);
   ModelArgs model_args;
   model_args.full_attention_interval(4);
@@ -1034,8 +1027,6 @@ TEST(EnginePrefixCacheTest, ImplicitLinearLayersKeepDecodePrefixCache) {
 }
 
 TEST(EnginePrefixCacheTest, FullAttentionDecodeKeepsRequestedSetting) {
-  ScopedConfigValue<bool> xtensor(
-      KVCacheConfig::get_instance().enable_xtensor(), false);
   FakeEngine engine(32, 4);
   for (const bool requested : {false, true}) {
     runtime::Options options;
@@ -1047,8 +1038,6 @@ TEST(EnginePrefixCacheTest, FullAttentionDecodeKeepsRequestedSetting) {
 }
 
 TEST(EnginePrefixCacheTest, MainEngineSynchronizesGlobalPrefixCache) {
-  ScopedConfigValue<bool> xtensor(
-      KVCacheConfig::get_instance().enable_xtensor(), false);
   FakeEngine engine(32, 4);
   for (const bool requested : {false, true}) {
     for (const bool global_enabled : {false, true}) {
@@ -1064,8 +1053,6 @@ TEST(EnginePrefixCacheTest, MainEngineSynchronizesGlobalPrefixCache) {
 }
 
 TEST(EnginePrefixCacheTest, DraftPrefixCacheDoesNotChangeGlobalConfig) {
-  ScopedConfigValue<bool> xtensor(
-      KVCacheConfig::get_instance().enable_xtensor(), false);
   FakeEngine engine(32, 4);
   ModelArgs model_args;
   model_args.full_attention_interval(4);
@@ -1087,8 +1074,6 @@ TEST(EnginePrefixCacheTest, DraftPrefixCacheDoesNotChangeGlobalConfig) {
 }
 
 TEST(EnginePrefixCacheTest, FullAttentionDecodeStillReusesKvPrefixes) {
-  ScopedConfigValue<bool> xtensor(
-      KVCacheConfig::get_instance().enable_xtensor(), false);
   FakeEngine engine(32, 4, true, false, InstanceRole::DECODE);
   BlockManagerPool* pool = engine.block_manager_pool();
   const std::vector<int32_t> prompt{1, 2, 3, 4, 5, 6, 7, 8};
@@ -1109,8 +1094,6 @@ TEST(EnginePrefixCacheTest, FullAttentionDecodeStillReusesKvPrefixes) {
 }
 
 TEST(EnginePrefixCacheTest, KPoolDoesNotDisableDecodePrefixCache) {
-  ScopedConfigValue<bool> xtensor(
-      KVCacheConfig::get_instance().enable_xtensor(), false);
   FakeEngine engine(32, 4);
   ModelArgs model_args;
   model_args.model_type("deepseek_v4")
@@ -1123,20 +1106,7 @@ TEST(EnginePrefixCacheTest, KPoolDoesNotDisableDecodePrefixCache) {
   EXPECT_TRUE(options.enable_prefix_cache());
 }
 
-TEST(EnginePrefixCacheTest, XTensorStillDisablesPrefixCache) {
-  ScopedConfigValue<bool> xtensor(
-      KVCacheConfig::get_instance().enable_xtensor(), true);
-  FakeEngine engine(32, 4, true);
-  runtime::Options options;
-  options.enable_prefix_cache(true);
-  engine.configure_prefix_cache(options);
-  EXPECT_FALSE(options.enable_prefix_cache());
-  EXPECT_FALSE(KVCacheConfig::get_instance().enable_prefix_cache());
-}
-
 TEST(EnginePrefixCacheTest, MtpDraftKeepsSharedCacheLayoutConfiguration) {
-  ScopedConfigValue<bool> xtensor(
-      KVCacheConfig::get_instance().enable_xtensor(), false);
   FakeEngine engine(32, 4);
   runtime::Options draft_options;
   draft_options.enable_prefix_cache(true)
@@ -1151,8 +1121,6 @@ TEST(EnginePrefixCacheTest, MtpDraftKeepsSharedCacheLayoutConfiguration) {
 }
 
 TEST(EnginePrefixCacheTest, DecodeLinearSupportsHostPrefixCacheAndStore) {
-  ScopedConfigValue<bool> xtensor(
-      KVCacheConfig::get_instance().enable_xtensor(), false);
   FakeEngine engine(32, 4, true, true, InstanceRole::DECODE);
   HostCacheValidationOptions options;
   options.host_blocks_factor = 2.0;
@@ -1173,8 +1141,6 @@ TEST(EnginePrefixCacheTest, DecodeLinearSupportsHostPrefixCacheAndStore) {
 }
 
 TEST(ContinuousSchedulerTest, InBatchPrefixCacheUsesGlobalConfig) {
-  ScopedConfigValue<bool> xtensor(
-      KVCacheConfig::get_instance().enable_xtensor(), false);
   for (const bool global_enabled : {false, true}) {
     FakeEngine engine(32, 4, global_enabled);
     EXPECT_EQ(KVCacheConfig::get_instance().enable_prefix_cache(),
@@ -1197,8 +1163,6 @@ TEST(ContinuousSchedulerTest, LearnsPrefixesWithoutCachePublication) {
       SchedulerConfig::get_instance().enable_chunked_prefill(), true);
   ScopedConfigValue<int32_t> chunk_size(
       SchedulerConfig::get_instance().max_tokens_per_chunk_for_prefill(), 16);
-  ScopedConfigValue<bool> xtensor(
-      KVCacheConfig::get_instance().enable_xtensor(), false);
   FakeEngine engine(/*num_blocks=*/64,
                     /*block_size=*/4,
                     /*enable_prefix_cache=*/true,
@@ -1239,8 +1203,6 @@ TEST(ContinuousSchedulerTest, LinearStatisticsShareAcrossDpOnlyWithinOwner) {
       SchedulerConfig::get_instance().enable_chunked_prefill(), true);
   ScopedConfigValue<int32_t> chunk_size(
       SchedulerConfig::get_instance().max_tokens_per_chunk_for_prefill(), 16);
-  ScopedConfigValue<bool> xtensor(
-      KVCacheConfig::get_instance().enable_xtensor(), false);
   constexpr int32_t kDpSize = 2;
   FakeEngine first_engine(
       64, 4, true, true, InstanceRole::DEFAULT, std::nullopt, kDpSize);
@@ -1305,8 +1267,6 @@ TEST(ContinuousSchedulerTest, LinearAdmissionUsesResolvedSchedulerMode) {
        .priority_strategy = "multi_slo_and_prio",
        .enabled = true},
   };
-  ScopedConfigValue<bool> xtensor(
-      KVCacheConfig::get_instance().enable_xtensor(), false);
   for (const TestCase& test_case : cases) {
     SCOPED_TRACE(test_case.name);
     ScopedConfigValue<bool> chunked(
@@ -1341,8 +1301,6 @@ TEST(ContinuousSchedulerTest, GroupedLayoutDisablesLinearAdmission) {
       SchedulerConfig::get_instance().enable_chunked_prefill(), true);
   ScopedConfigValue<int32_t> chunk_size(
       SchedulerConfig::get_instance().max_tokens_per_chunk_for_prefill(), 16);
-  ScopedConfigValue<bool> xtensor(
-      KVCacheConfig::get_instance().enable_xtensor(), false);
   FakeEngine engine(64, 4, true, true);
   BlockManagerPool::Options cache_options =
       engine.block_manager_pool()->options();
@@ -1367,8 +1325,6 @@ TEST(ContinuousSchedulerTest, ScheduledPromptsTeachLinearCheckpoints) {
       SchedulerConfig::get_instance().enable_chunked_prefill(), true);
   ScopedConfigValue<int32_t> chunk_size(
       SchedulerConfig::get_instance().max_tokens_per_chunk_for_prefill(), 16);
-  ScopedConfigValue<bool> xtensor(
-      KVCacheConfig::get_instance().enable_xtensor(), false);
   LinearPrefixExecutionEngine engine(64, 4, true, true);
   ContinuousScheduler::Options options =
       create_scheduler_options(32, 4, 0, 16, 1);
@@ -1404,8 +1360,6 @@ TEST(ContinuousSchedulerTest, DecodeLinearEnablesInBatchPrefixReuse) {
       KVCacheConfig::get_instance().enable_prefix_cache(), true);
   ScopedConfigValue<bool> in_batch_prefix_cache(
       KVCacheConfig::get_instance().enable_in_batch_prefix_cache(), true);
-  ScopedConfigValue<bool> xtensor(
-      KVCacheConfig::get_instance().enable_xtensor(), false);
   FakeEngine engine(32, 4, true, true, InstanceRole::DECODE);
   // Decode keeps KV prefix reuse. LINEAR checkpoints are not published on
   // this role, and the prefill cap below stays off for DECODE.
@@ -2157,7 +2111,7 @@ TEST(ContinuousSchedulerTest,
 TEST(ContinuousSchedulerTest, QueueCapacityRejectsBeforePrefetchStarts) {
   const double input_before = COUNTER_VALUE(request_input_tokens_total);
   ScopedConfigValue<int32_t> request_queue_size(
-      RecConfig::get_instance().request_queue_size(), 1);
+      SchedulerConfig::get_instance().request_queue_size(), 1);
   ContinuousScheduler::Options options =
       create_scheduler_options(64, 4, 0, 64, 1);
   auto engine = std::make_unique<FakeEngine>(64, 32);
@@ -2188,7 +2142,7 @@ TEST(ContinuousSchedulerTest, QueueCapacityRejectsBeforePrefetchStarts) {
 
 TEST(ContinuousSchedulerTest, RejectedPdAdmissionCannotClaimQueuedOrValidTtft) {
   ScopedConfigValue<int32_t> request_queue_size(
-      RecConfig::get_instance().request_queue_size(), 1);
+      SchedulerConfig::get_instance().request_queue_size(), 1);
   auto options = create_scheduler_options(64, 4, 0, 64, 1);
   options.enable_disagg_pd() = true;
   auto engine = std::make_unique<FakeEngine>(64, 32);
@@ -2224,7 +2178,7 @@ TEST(ContinuousSchedulerTest, RejectedPdAdmissionCannotClaimQueuedOrValidTtft) {
 TEST(ContinuousSchedulerTest,
      CompletedPrefetchWaitsWhenAnotherProducerFillsQueue) {
   ScopedConfigValue<int32_t> request_queue_size(
-      RecConfig::get_instance().request_queue_size(), 1);
+      SchedulerConfig::get_instance().request_queue_size(), 1);
   ContinuousScheduler::Options options =
       create_scheduler_options(64, 4, 0, 64, 1);
   auto engine = std::make_unique<FakeEngine>(64, 32);
@@ -2315,20 +2269,9 @@ TEST(SchedulerFactoryTest, DisaggPDChunkedPrefillUsesDisaggPD) {
   ContinuousScheduler::Options opt =
       create_scheduler_options(10000, 256, 2, 1024, 1);
   opt.enable_disagg_pd() = true;
-  opt.enable_pd_ooc() = false;
   opt.enable_chunked_prefill() = true;
 
   EXPECT_EQ(select_scheduler_kind(opt), SchedulerKind::DISAGG_PD);
-}
-
-TEST(SchedulerFactoryTest, DisaggPDOOCKeepsPDOOCKind) {
-  ContinuousScheduler::Options opt =
-      create_scheduler_options(10000, 256, 0, 1024, 1);
-  opt.enable_disagg_pd() = true;
-  opt.enable_pd_ooc() = true;
-  opt.enable_chunked_prefill() = true;
-
-  EXPECT_EQ(select_scheduler_kind(opt), SchedulerKind::PD_OOC);
 }
 
 TEST(ContinuousSchedulerTest, BeamStrictNoPartialScheduling) {

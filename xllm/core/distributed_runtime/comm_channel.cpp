@@ -217,36 +217,6 @@ bool CommChannel::unlink_cluster(const std::vector<uint64_t>& cluster_ids,
   return true;
 }
 
-bool CommChannel::link_p2p(const std::string& remote_addr) {
-  proto::P2PLinkWorkerRequest req;
-  req.set_remote_addr(remote_addr);
-
-  proto::Status s;
-  brpc::Controller cntl;
-  stub_->LinkP2P(&cntl, &req, &s, nullptr);
-
-  if (cntl.Failed() || !s.ok()) {
-    LOG(ERROR) << "LinkP2P failed: " << cntl.ErrorText();
-    return false;
-  }
-  return true;
-}
-
-bool CommChannel::unlink_p2p(const std::string& remote_addr) {
-  proto::P2PLinkWorkerRequest req;
-  req.set_remote_addr(remote_addr);
-
-  proto::Status s;
-  brpc::Controller cntl;
-  stub_->UnlinkP2P(&cntl, &req, &s, nullptr);
-
-  if (cntl.Failed() || !s.ok()) {
-    LOG(ERROR) << "UnlinkP2P failed: " << cntl.ErrorText();
-    return false;
-  }
-  return true;
-}
-
 bool CommChannel::init_model(const std::string& model_weights_path,
                              int32_t random_seed,
                              MasterStatus master_status) {
@@ -468,19 +438,6 @@ bool CommChannel::wakeup(const WakeupOptions& options) {
   proto::WakeupRequest req;
 
   req.set_master_status(options.master_status.to_proto());
-  if (!options.remote_addrs.empty()) {
-    req.mutable_remote_addrs()->Assign(options.remote_addrs.begin(),
-                                       options.remote_addrs.end());
-  }
-  // Marshal weight segments (new multi-segment format)
-  for (const auto& segments : options.src_weight_segments) {
-    auto* seg_list = req.add_src_weight_segments();
-    for (const auto& seg : segments) {
-      auto* proto_seg = seg_list->add_segments();
-      proto_seg->set_offset(seg.offset);
-      proto_seg->set_size(seg.size);
-    }
-  }
   stub_->Wakeup(&cntl, &req, &s, nullptr);
   if (cntl.Failed() || !s.ok()) {
     LOG(ERROR) << "Wakeup failed: " << cntl.ErrorText();

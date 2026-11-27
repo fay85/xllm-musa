@@ -314,7 +314,6 @@ TEST(EngineUtilsTest, HostValidationOptionsIncludeRuntimeConfiguration) {
   runtime_options.host_blocks_factor(2.0)
       .enable_prefix_cache(false)
       .enable_disagg_pd(true)
-      .enable_pd_ooc(true)
       .enable_kvcache_store(true)
       .instance_role(InstanceRole::DECODE)
       .kv_cache_dtype("auto");
@@ -324,7 +323,6 @@ TEST(EngineUtilsTest, HostValidationOptionsIncludeRuntimeConfiguration) {
   EXPECT_EQ(options.device_block_count, 16);
   EXPECT_FALSE(options.enable_prefix_cache);
   EXPECT_TRUE(options.enable_disagg_pd);
-  EXPECT_TRUE(options.enable_pd_ooc);
   EXPECT_TRUE(options.enable_kvcache_store);
   EXPECT_EQ(options.instance_role, InstanceRole::DECODE);
   EXPECT_EQ(options.has_key_cache_shape, shape.has_key_cache_shape());

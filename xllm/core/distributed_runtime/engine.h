@@ -138,16 +138,6 @@ class Engine {
   };
 
   // P2P link for weight transfer - each worker links to one remote addr.
-  virtual bool link_p2p(const std::vector<std::string>& remote_addrs) {
-    NOT_IMPLEMENTED();
-    return false;
-  };
-
-  virtual bool unlink_p2p(const std::vector<std::string>& remote_addrs) {
-    NOT_IMPLEMENTED();
-    return false;
-  };
-
   virtual bool sleep(MasterStatus master_status) {
     LOG(FATAL) << " sleep is not implemented!";
     return false;
@@ -193,19 +183,6 @@ class Engine {
     return false;
   };
 
-  // XTensor mode: get GlobalXTensor offsets for allocated blocks
-  // Returns per-layer K/V offsets for each block
-  // Output: offsets[layer_id] = {k_offsets, v_offsets}
-  // dp_rank: Target DP rank to query (offsets come from workers in that DP
-  // group)
-  virtual bool get_xtensor_offsets_for_blocks(
-      int32_t dp_rank,
-      const std::vector<int32_t>& block_ids,
-      std::vector<std::pair<std::vector<uint64_t>, std::vector<uint64_t>>>&
-          layer_offsets) {
-    return false;
-  };
-
  protected:
   void init_host_restore_threadpool(const runtime::Options& options,
                                     uint32_t dp_group_size);
@@ -217,13 +194,6 @@ class Engine {
       const std::vector<BlockTransferInfo>& block_transfer_info);
 
   void configure_prefix_cache(runtime::Options& options) const {
-    const bool enable_xtensor = KVCacheConfig::get_instance().enable_xtensor();
-    if (options.enable_prefix_cache() && enable_xtensor) {
-      options.enable_prefix_cache(false);
-      LOG(INFO) << "Disabling prefix cache for model "
-                << model_args().model_type()
-                << ": enable_xtensor=" << enable_xtensor;
-    }
     if (!options.is_draft_engine()) {
       KVCacheConfig::get_instance().enable_prefix_cache(
           options.enable_prefix_cache());
@@ -237,7 +207,6 @@ class Engine {
   TokenizerArgs tokenizer_args_;
 
   // kv cache manager
-  // support `block manager` and `xtensor manager` currently.
   std::unique_ptr<KVCacheManager> kv_cache_manager_;
 
   // tokenizer

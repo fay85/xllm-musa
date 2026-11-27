@@ -60,7 +60,6 @@ def rewrite_generated_includes(text: str) -> str:
 
     text = re.sub(r'"(?:\.\./)+(?:cuda|hip)/type_convert\.cuh"', '"type_convert.cuh"', text)
     text = re.sub(r'"(?:\.\./)+(?:cuda|hip)/device_utils\.cuh"', '"device_utils.cuh"', text)
-    text = re.sub(r'"(?:\.\./)+(?:cuda|hip)/topk_last_dim\.cuh"', '"topk_last_dim.cuh"', text)
     text = re.sub(r'"(?:\.\./)+(?:cuda|hip)/fp8_quant_utils\.cuh"', '"fp8_quant_utils.cuh"', text)
 
     text = re.sub(r'"(?:\.\./)+(?:cuda|hip)/moe/', '"moe/', text)

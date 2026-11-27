@@ -178,7 +178,6 @@ VLMMaster::VLMMaster(const Options& options)
 
   if (options_.enable_service_routing()) {
     // P/D descriptors must use the loaded VLM runtime independently of the
-    // optional xtensor path that may also bind the scheduler's engine.
     XServiceClient::get_instance()->set_engine(engine_.get());
     XServiceClient::get_instance()->register_instance(
         scheduler_->get_instance_info());

@@ -2,10 +2,10 @@
 
 ## 作用
 
-`xllm_test` 是一个基于 **brpc** 的小型服务进程，用于在 **RPC 层** 验证 xLLM 的 **C API**（`xllm/c_api/llm.h` 或 `rec.h`）：
+`xllm_test` 是一个基于 **brpc** 的小型服务进程，用于在 **RPC 层** 验证 xLLM 的 **C API**（`xllm/c_api/llm.h`）：
 
 - 对客户端暴露 **一个** RPC：`Inference(XLLM_Request) -> XLLM_Response`（定义见 `xllm_test.proto`）。
-- 根据请求里的 **`call_function`** 字符串，转发到对应的 C API（例如 `xllm_llm_completions`、`xllm_rec_text_completions` 等）。
+- 根据请求里的 **`call_function`** 字符串，转发到对应的 C API（例如 `xllm_llm_completions`）。
 - 请求/响应中的结构与 `types.h` 对齐，由 `utils.cpp` 在 **Protobuf** 与 **C 结构体** 之间做转换。
 
 **注意**：一次进程只加载 **一种** 后端，由 **`--backend`** 决定：
@@ -13,9 +13,7 @@
 | `--backend` | 使用的 C API | 仅有效的 `call_function` 前缀 |
 |-------------|--------------|--------------------------------|
 | `llm`       | `llm.h`      | `xllm_llm_*`                   |
-| `rec`       | `rec.h`      | `xllm_rec_*`                   |
 
-若后端与 `call_function` 不匹配（例如在 `rec` 模式下调用 `xllm_llm_completions`），会返回错误（例如 handler 为空）。
 
 ---
 
@@ -63,7 +61,7 @@ cmake --build build -j$(nproc)
 
 ## 运行
 
-1. 编辑示例 flags：**`xllm_test.flags`**（至少设置 **`--model_path`**、**`--devices`**，并按需设置 **`--backend=llm`** 或 **`--backend=rec`**）。
+1. 编辑示例 flags：**`xllm_test.flags`**（至少设置 **`--model_path`**、**`--devices`**）。
 
 2. 启动服务：
 
@@ -75,7 +73,6 @@ cmake --build build -j$(nproc)
 
 ```bash
 ./build/xllm_test \
-  --backend=rec \
   --model_path=/path/to/model \
   --devices=auto \
   --port=8000
@@ -86,7 +83,7 @@ cmake --build build -j$(nproc)
    - 若设置 **`--listen_addr=host:port`**，则优先使用该地址（与 `xllm_test.flags` 中注释一致）。
 
 4. **调用方式**  
-   任意支持 **brpc + 同一套 `xllm_test.proto`** 的客户端，向上述地址发起 **`XllmRecCapiService/Inference`**，在 **`XLLM_Request.call_function`** 中填入与当前 **`--backend`** 一致的 API 名称即可。
+   任意支持 **brpc + 同一套 `xllm_test.proto`** 的客户端，向上述地址发起 **`XllmCapiService/Inference`**，在 **`XLLM_Request.call_function`** 中填入LLM C API 名称即可。
 
 ---
 

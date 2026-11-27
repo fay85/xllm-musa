@@ -48,7 +48,7 @@ class SequencesGroup {
                         const Tokenizer& tokenizer,
                         ThreadPool* thread_pool = nullptr);
 
-  void process_beam_search(bool force_requested_result_size = false);
+  void process_beam_search();
 
   bool check_beam_search() {
     return sequence_params_.sampling_param->beam_width > 1;
@@ -62,9 +62,6 @@ class SequencesGroup {
     return sequences_[0]->is_chunked_prefill_stage();
   }
 
-  // mark all sequences as finished (used by rec model multi-round decoding)
-  void finish();
-
  private:
   void add();
 
@@ -72,12 +69,6 @@ class SequencesGroup {
                                  const Tokenizer& tokenizer,
                                  ThreadPool* thread_pool = nullptr);
 
-  // Generate output for multi-round beam search
-  void generate_multi_round_output(std::vector<SequenceOutput>& outputs,
-                                   const Tokenizer& tokenizer,
-                                   const Sequence& base);
-
- private:
   const std::string& prompt_;                  // ref from request
   const std::vector<int32_t>& prompt_tokens_;  // ref from request
   const torch::Tensor& input_embedding_;       // ref from request

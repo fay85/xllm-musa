@@ -60,14 +60,6 @@ bool WorkerClient::unlink_cluster(const std::vector<uint64_t>& cluster_ids,
   return worker_->unlink_cluster(cluster_ids, addrs, ports);
 }
 
-bool WorkerClient::link_p2p(const std::string& remote_addr) {
-  return worker_->link_p2p(remote_addr);
-}
-
-bool WorkerClient::unlink_p2p(const std::string& remote_addr) {
-  return worker_->unlink_p2p(remote_addr);
-}
-
 std::tuple<int64_t, int64_t> WorkerClient::estimate_kv_cache_capacity() {
   return worker_->estimate_kv_cache_capacity();
 }

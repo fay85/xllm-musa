@@ -103,8 +103,6 @@ limitations under the License.
 #include "framework/parallel_state/npu_cp_plan.h"
 #include "framework/sampling/sampler.h"
 #include "framework/state_dict/state_dict.h"
-#include "framework/xtensor/global_xtensor.h"
-#include "framework/xtensor/xtensor_allocator.h"
 #include "layers/common/kv_shard_batch_metadata.h"
 #include "models/model_registry.h"
 #include "models/py_model_helper.h"
@@ -440,26 +438,11 @@ WorkerImpl::WorkerImpl(const ParallelArgs& parallel_args,
     target_graph_capture_sizes_ = runtime::get_decode_graph_capture_sizes(
         options_, static_cast<int64_t>(options_.num_speculative_tokens()) + 1);
   }
-  if (::xllm::KVCacheConfig::get_instance().enable_xtensor()) {
-    if (!weight_transfer_) {
-      weight_transfer_ = std::make_unique<MooncakeWeightTransfer>(
-          options_.transfer_listen_port(), device_.unwrap());
-    }
-    if (!weight_transfer_->initialize()) {
-      LOG(ERROR) << "Failed to initialize MooncakeWeightTransfer";
-    }
-    if (!weight_transfer_->register_global_xtensor()) {
-      LOG(ERROR) << "Failed to register GlobalXTensor";
-    }
-  }
   if (::xllm::LoadConfig::get_instance().enable_rolling_load()) {
     load_stream_ = device_.get_stream_from_pool();
   }
-  worker_rendezvous_ =
-      std::make_unique<WorkerRendezvous>(kv_cache_transfer_, weight_transfer_);
-#else
-  worker_rendezvous_ = std::make_unique<WorkerRendezvous>(kv_cache_transfer_);
 #endif
+  worker_rendezvous_ = std::make_unique<WorkerRendezvous>(kv_cache_transfer_);
 }
 
 CausalLM* WorkerImpl::get_causal_lm() const { return model_.get(); }
@@ -482,12 +465,8 @@ bool WorkerImpl::allocate_kv_cache_storage(
 
   const bool has_grouped_cache = kv_cache_shape.has_grouped_cache_layout();
   if (has_grouped_cache && options_.enable_disagg_pd()) {
-    CHECK(!options_.enable_pd_ooc())
-        << "Grouped KV cache PD does not support PD-OOC yet.";
   }
   if (has_grouped_cache) {
-    CHECK(!::xllm::KVCacheConfig::get_instance().enable_xtensor())
-        << "Grouped KV cache layout does not support XTensor cache.";
   }
   const auto& args = context_.get_model_args();
   const KVCacheCreateOptions layout_options =
@@ -580,7 +559,6 @@ bool WorkerImpl::allocate_kv_cache_storage(
       .layer_types(layout_options.layer_types())
       .model_id(options_.model_id())
       .model_type(args.model_type())
-      .enable_xtensor(::xllm::KVCacheConfig::get_instance().enable_xtensor())
       .enable_sleep_mode(options_.enable_sleep_mode())
       .enable_linear_attention(enable_linear_attention)
       .enable_lighting_indexer(enable_lighting_indexer)
@@ -771,14 +749,6 @@ bool WorkerImpl::unlink_cluster(const std::vector<uint64_t>& cluster_ids,
                                 const std::vector<std::string>& addrs,
                                 const std::vector<uint16_t>& ports) {
   return worker_rendezvous_->unlink_cluster(cluster_ids, addrs, ports);
-}
-
-bool WorkerImpl::link_p2p(const std::string& remote_addr) {
-  return worker_rendezvous_->link_p2p(remote_addr);
-}
-
-bool WorkerImpl::unlink_p2p(const std::string& remote_addr) {
-  return worker_rendezvous_->unlink_p2p(remote_addr);
 }
 
 std::tuple<int64_t, int64_t> WorkerImpl::estimate_kv_cache_capacity() {
@@ -2208,17 +2178,12 @@ folly::SemiFuture<bool> WorkerImpl::init_model_async(
   return future;
 }
 
-bool WorkerImpl::rl_sleep_mode() const {
-  return options_.enable_sleep_mode() &&
-         !::xllm::KVCacheConfig::get_instance().enable_xtensor();
-}
-
 void WorkerImpl::setup_rl_sleep_weights() {
   // Route each decoder layer's contiguous weight buffer (manual loader) into a
   // VMM-backed SleepableAllocator region so rl_sleep() can release the weight
   // HBM. Must run before the layers are constructed (loader mode is chosen in
   // the layer ctor) and before weights are loaded.
-  if (!rl_sleep_mode()) {
+  if (!options_.enable_sleep_mode()) {
     return;
   }
   ::xllm::LoadConfig::get_instance().enable_manual_loader(/*enable=*/true);
@@ -2244,24 +2209,11 @@ bool WorkerImpl::rl_wakeup() {
   return true;
 }
 
-bool WorkerImpl::xtensor_sleep(MasterStatus master_status) {
-  // The memory for kvcache and model weights from hbm is released by xtensor;
-  if (master_status == MasterStatus::LIGHT_SLEEP) {
-    // only load model weights to host memory.
-    auto model_loader = ModelLoader::create(model_weights_path_);
-    model_->lazy_load_model(std::move(model_loader));
-  } else if (master_status == MasterStatus::DEEP_SLEEP) {
-    // only release model weights from host memory.
-    model_->free_model_weights();
-  }
-  return true;
-}
-
 bool WorkerImpl::sleep(MasterStatus master_status) {
-  if (rl_sleep_mode()) {
+  if (options_.enable_sleep_mode()) {
     return rl_sleep();
   }
-  return xtensor_sleep(master_status);
+  return false;
 }
 
 bool WorkerImpl::update_weights(const std::string& weights_path) {
@@ -2452,114 +2404,11 @@ bool WorkerImpl::stop_profile() {
 }
 
 bool WorkerImpl::wakeup(const WakeupOptions& options) {
-  if (rl_sleep_mode()) {
-    return rl_wakeup();
-  }
-
-  if (!options.remote_addrs.empty()) {
-#if defined(USE_NPU)
-    return wakeup_from_remote_weights(options);
-#endif
-    LOG(ERROR) << "Remote weight wakeup only supports npu device.";
+  if (!options_.enable_sleep_mode()) {
     return false;
   }
-
-  return wakeup_local(options);
+  return rl_wakeup();
 }
-
-bool WorkerImpl::wakeup_local(const WakeupOptions& options) {
-  if (options.master_status == MasterStatus::LIGHT_SLEEP) {
-#if defined(USE_NPU)
-    if (::xllm::LoadConfig::get_instance().enable_rolling_load() &&
-        !is_spec_draft_) {
-      // Reuse rolling runtime state and refresh rolling initialization on
-      // wakeup without re-reading checkpoint in LIGHT_SLEEP.
-      if (!init_rolling_runtime_state()) {
-        LOG(ERROR) << "Failed to initialize rolling runtime state on wakeup";
-        return false;
-      }
-    } else {
-      model_->reload_model_weights();
-    }
-#else
-    model_->reload_model_weights();
-#endif
-  } else if (options.master_status == MasterStatus::DEEP_SLEEP) {
-    auto model_loader = ModelLoader::create(model_weights_path_);
-    this->load_model(std::move(model_loader));
-  }
-  return true;
-}
-
-#if defined(USE_NPU)
-bool WorkerImpl::wakeup_from_remote_weights(const WakeupOptions& options) {
-  // Prefer segment-based transfer if available, fallback to legacy offsets.
-  if (::xllm::LoadConfig::get_instance().enable_rolling_load()) {
-    LOG(ERROR) << "Remote weight wakeup does not support "
-                  "::xllm::LoadConfig::get_instance().enable_rolling_load()";
-    return false;
-  }
-
-  bool use_segments = !options.src_weight_segments.empty();
-  if (use_segments) {
-    if (options.src_weight_segments.size() != options.remote_addrs.size()) {
-      LOG(ERROR) << "remote_addrs and src_weight_segments size mismatch: "
-                 << options.remote_addrs.size() << " vs "
-                 << options.src_weight_segments.size();
-      return false;
-    }
-  } else {
-    // Legacy single-offset mode (backward compatibility).
-    if (options.src_weight_segments.empty() &&
-        options.remote_addrs.size() > 0) {
-      LOG(ERROR) << "No weight segments provided for remote wakeup";
-      return false;
-    }
-  }
-
-  auto& allocator = XTensorAllocator::get_instance();
-  auto* tensors = allocator.get_model_tensors(options_.model_id());
-  if (!tensors || tensors->weight_base_ptr == nullptr ||
-      tensors->weight_num_pages == 0) {
-    LOG(ERROR) << "Weight region not initialized for model "
-               << options_.model_id();
-    return false;
-  }
-
-  auto& global_xtensor = GlobalXTensor::get_instance();
-  if (!global_xtensor.is_initialized()) {
-    LOG(ERROR) << "GlobalXTensor not initialized";
-    return false;
-  }
-  if (!weight_transfer_) {
-    LOG(ERROR) << "MooncakeWeightTransfer not initialized";
-    return false;
-  }
-
-  // Destination is always contiguous (local allocation).
-  uint64_t dst_base_offset =
-      reinterpret_cast<uintptr_t>(tensors->weight_base_ptr) -
-      reinterpret_cast<uintptr_t>(global_xtensor.base_vaddr());
-  for (size_t i = 0; i < options.remote_addrs.size(); ++i) {
-    const auto& segments = options.src_weight_segments[i];
-    uint64_t dst_offset = dst_base_offset;
-    // Pull each segment from source, writing sequentially to destination.
-    for (const auto& seg : segments) {
-      if (!weight_transfer_->pull_weights(
-              options.remote_addrs[i], seg.offset, dst_offset, seg.size)) {
-        LOG(ERROR) << "Failed to pull remote weight segment from "
-                   << options.remote_addrs[i] << ", src_offset=" << seg.offset
-                   << ", size=" << seg.size;
-        return false;
-      }
-      dst_offset += seg.size;
-    }
-  }
-
-  model_->reload_model_weights_from_device();
-  return true;
-}
-#endif
 
 // initialize model, cache manager. async call
 bool WorkerImpl::init_model(const std::string& model_weights_path,
@@ -2745,7 +2594,6 @@ bool WorkerImpl::init_model_from_path(
 
   status_ = Status::LOADED;
   if (::xllm::EPLBConfig::get_instance().enable_eplb()) {
-    // todo: support xtensor
     int32_t num_layers = args.n_layers() - args.first_k_dense_replace();
     const int32_t eplb_device_num =
         eplb::effective_device_num(context_.get_parallel_args().world_size(),

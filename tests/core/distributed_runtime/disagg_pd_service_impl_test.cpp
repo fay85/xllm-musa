@@ -29,11 +29,9 @@ limitations under the License.
 
 #include "core/common/macros.h"
 #include "core/common/metrics.h"
-#include "core/distributed_runtime/pd_ooc_service.h"
 #include "core/framework/config/kv_cache_config.h"
 #include "core/framework/config/service_config.h"
 #include "core/scheduler/disagg_pd_scheduler.h"
-#include "core/scheduler/pd_ooc_scheduler.h"
 #include "core/scheduler/perf_model.h"
 #include "core/util/scope_guard.h"
 #include "distributed_runtime/engine.h"
@@ -85,7 +83,6 @@ class FakeTokenizer final : public Tokenizer {
 class FakeEngine final : public Engine {
  public:
   FakeEngine(int32_t num_blocks, int32_t block_size) {
-    // PDOOC computes FLOPs and saturation estimates during construction.
     model_args_.n_layers(1)
         .vocab_size(128)
         .hidden_size(8)
@@ -173,19 +170,6 @@ class TestDisaggPDServiceImpl final : public DisaggPDServiceImpl {
  public:
   using DisaggPDServiceImpl::DisaggPDServiceImpl;
   using DisaggPDServiceImpl::generate_request;
-};
-
-class TestPDOOCScheduler final : public PDOOCScheduler {
- public:
-  TestPDOOCScheduler(Engine* engine, const Options& options)
-      : PDOOCScheduler(engine, options, /*start_services=*/false) {}
-
-  // Supply the admitted reservation without starting background dispatch.
-  void reserve(std::shared_ptr<Request> request) {
-    const std::string request_id = request->request_id();
-    std::lock_guard<std::mutex> lock(received_request_map_mutex_);
-    received_request_map_.emplace(request_id, std::move(request));
-  }
 };
 
 class GenerationReceiver final : public xllm_service::proto::XllmRpcService {
@@ -294,8 +278,7 @@ TEST_F(DisaggPDServiceImplTest, AdmissionFailureStatusMatchesFailureClass) {
     SCOPED_TRACE(c.name);
     FakeEngine engine(/*num_blocks=*/8, /*block_size=*/2);
     DisaggPDScheduler::Options options;
-    options.enable_pd_ooc(true)
-        .enable_disagg_pd(true)
+    options.enable_disagg_pd(true)
         .enable_schedule_overlap(false)
         .instance_role(InstanceRole::PREFILL)
         .max_tokens_per_batch(32)
@@ -338,71 +321,6 @@ TEST_F(DisaggPDServiceImplTest, AdmissionFailureStatusMatchesFailureClass) {
     EXPECT_EQ(responses.resps(0).req_id(), req->req_id());
     EXPECT_EQ(responses.resps(0).status_code(), c.expected_status);
   }
-}
-
-TEST_F(DisaggPDServiceImplTest,
-       PDOOCMultiGenerationConfirmsFirstTokenBeforeTerminalLength) {
-  auto previous_perf_model = perf_model::get_perf_model();
-  ScopeGuard restore_perf_model(
-      [&] { perf_model::set_perf_model(previous_perf_model); });
-  FakeEngine engine(/*num_blocks=*/8, /*block_size=*/2);
-  DisaggPDScheduler::Options options;
-  options.enable_disagg_pd(true)
-      .enable_pd_ooc(true)
-      .enable_schedule_overlap(false)
-      .instance_role(InstanceRole::DECODE)
-      .max_tokens_per_batch(32)
-      .max_seqs_per_batch(4)
-      .max_tokens_per_chunk_for_prefill(32)
-      .dp_size(1);
-  TestPDOOCScheduler scheduler(&engine, options);
-  PDOOCService service(&scheduler, &engine);
-
-  RequestState state;
-  state.prompt = "prompt";
-  state.prompt_tokens = {1};
-  state.seq_capacity = 8;
-  state.stream = true;
-  state.n = state.best_of = 1;
-  state.stopping_checker.set_max_generated_tokens(2);
-  auto request = std::make_shared<Request>(
-      "pd-ooc-confirmed-first-token", "", "", std::move(state));
-  request->enable_forwarded_token_output();
-  // PUSH hands off a reservation whose prompt KV is already prepared.
-  request->sequences().front()->kv_state().set_kv_cache_tokens_num(
-      request->sequences().front()->num_prompt_tokens());
-  scheduler.reserve(request);
-
-  proto::DisaggGenerationsRequests sent;
-  proto::DisaggGenerationsRequest* generation = sent.add_multi_gens();
-  generation->set_req_id(request->request_id());
-  generation->set_kv_cache_transfer_mode("PUSH");
-  generation->add_tokens()->set_token_id(65);
-  generation->set_confirmed_upstream_output_tokens(1);
-  proto::DisaggGenerationsRequests received;
-  ASSERT_TRUE(received.ParseFromString(sent.SerializeAsString()));
-  brpc::Controller controller;
-  proto::Status response;
-  service.MultiGenerations(&controller, &received, &response, nullptr);
-  ASSERT_TRUE(response.ok());
-  ASSERT_EQ(request->confirmed_output_tokens(), 1u);
-
-  request->sequences().front()->append_token(Token(66));
-  ASSERT_EQ(request->claim_terminal_outcome(std::nullopt),
-            RequestTerminalOutcome::SUCCESS);
-  RequestOutput output;
-  output.finished = true;
-  output.usage.emplace();
-  output.usage->num_generated_tokens = 2;
-  output.outputs.resize(1);
-  output.outputs.front().generated_token_count = 2;
-  const int64_t samples = HISTOGRAM_num_generated_tokens_per_request.count();
-  const double tokens = COUNTER_VALUE(request_output_tokens_total);
-  request->record_token_output(output, /*submitted=*/true);
-  request->record_token_output(output, /*submitted=*/true);
-  EXPECT_EQ(request->confirmed_output_tokens(), 2u);
-  EXPECT_EQ(COUNTER_VALUE(request_output_tokens_total), tokens + 1);
-  EXPECT_EQ(HISTOGRAM_num_generated_tokens_per_request.count(), samples + 1);
 }
 
 TEST_F(DisaggPDServiceImplTest, RequestOutputCallbacksOutliveService) {

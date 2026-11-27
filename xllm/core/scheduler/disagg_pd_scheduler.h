@@ -69,9 +69,7 @@ struct KvSplitDispatchPlan {
   std::string reason;
 };
 
-// Shared KV-split width resolution for every dispatch override
-// (DisaggPDScheduler::dispatch_requests and PDOOCScheduler::dispatch_requests,
-// online and offline): determines how a PUSH toward `remote_info` may map
+// KV-split width resolution determines how a PUSH toward `remote_info` may map
 // source logical blocks onto the destination's declared block table, and
 // assembles the TransferKVInfo rank-local mapping decision from the decode
 // instance's allocation `response`.
@@ -82,13 +80,6 @@ struct KvSplitDispatchPlan {
 // returned: only the width plan is known. After the RPC, destination group IDs
 // are validated before installing transfer state. KV tables start after their
 // shared prefix; other groups start at logical block zero.
-//
-// Both overrides MUST resolve the plan through this helper. The OOC path
-// historically skipped it, so an equal-width pair (decode declaring
-// kv_split_size > 1) silently fell back to strided remapping and was
-// mis-addressed by kv_split_rank + k * kv_split_size, and unreconcilable
-// pairs (including a sharded-write source against an equal-width
-// destination) were never rejected.
 KvSplitDispatchPlan resolve_kv_split_plan(
     int32_t src_kv_split_size,
     int32_t src_cp_index_write_mode,
@@ -149,11 +140,6 @@ class DisaggPDScheduler : public ContinuousScheduler {
                            bool unsafe = false,
                            bool* unsafe_leased = nullptr);
 
-  // PD-OOC owns a different reservation lifecycle, so the unsafe-transfer
-  // lease is not wired into it. lease_waiting_reservation_if_unsafe_locked
-  // consults this before creating a lease, so callers cannot bypass it.
-  bool supports_kv_unsafe_lease() const { return !options_.enable_pd_ooc(); }
-
   // Only cancels Decode requests after KV restore/handoff, on the scheduler
   // thread. Never frees a reservation that Prefill may still be writing.
   proto::CancelRequestResponse::Result cancel_request(
@@ -164,7 +150,7 @@ class DisaggPDScheduler : public ContinuousScheduler {
   DecodeAdmissionResult try_admit(const std::shared_ptr<Request>& request);
 
   // Classifies a failed allocation as permanently oversized.
-  // DSV4 multi-manager and XTensor layouts conservatively return false because
+  // DSV4 multi-manager layouts conservatively return false because
   // their effective token capacity cannot be derived from the flat KV count.
   bool exceeds_decode_capacity(Sequence* sequence) const;
 
@@ -196,12 +182,7 @@ class DisaggPDScheduler : public ContinuousScheduler {
   bool reject_queued_request(const std::shared_ptr<Request>& request) override;
 
   // Fail a request whose kv_split pair resolve_kv_split_plan marked
-  // UNRECONCILABLE. Shared by every dispatch path (the online dispatch
-  // here, PDOOCScheduler's online and offline dispatches) so the width
-  // gate's failure handling cannot drift between the non-OOC and OOC
-  // paths -- the OOC path historically missed the width gate for exactly
-  // that reason. release_prefill_blocks additionally frees the
-  // prefill-side blocks the offline path has already allocated.
+  // UNRECONCILABLE.
   void reject_unreconcilable_kv_split(const std::shared_ptr<Request>& request,
                                       const std::string& instance_name,
                                       const std::string& reason,
@@ -209,8 +190,7 @@ class DisaggPDScheduler : public ContinuousScheduler {
 
   // Caller-safe snapshot of a destination's registered record, taken under
   // instance_channel_map_mutex_: check_remote_instance_info inserts into
-  // remote_instances_info_ on the RPC thread while the OOC scheduler runs
-  // its online and offline dispatches on two concurrent threads, so an
+  // remote_instances_info_ on the RPC thread, so an
   // unlocked operator[] read races the map's rehash -- and for a missing
   // key operator[] would INSERT a default record (kv_split_size = 1,
   // empty name), silently flipping the width gate's failure direction to
@@ -228,12 +208,7 @@ class DisaggPDScheduler : public ContinuousScheduler {
   // already failed through process_failed_request), resolve the width plan
   // through resolve_kv_split_plan, and reject through
   // reject_unreconcilable_kv_split when the pair is UNRECONCILABLE. Returns
-  // the snapshot on success. The online dispatch here, PDOOCScheduler's
-  // online dispatch, and its offline dispatch MUST route through this helper
-  // -- the sequence was previously copied verbatim per path, and the next
-  // check added to one copy would silently miss the other two.
-  // release_prefill_blocks frees the prefill-side blocks the offline path
-  // has already allocated when it rejects.
+  // the snapshot on success.
   std::optional<InstanceInfo> admit_kv_split_request(
       const std::shared_ptr<Request>& request,
       const std::string& instance_name,
@@ -339,7 +314,7 @@ class DisaggPDScheduler : public ContinuousScheduler {
       /*cpu_binding=*/false,
       /*pool_name=*/"DisaggPDScheduler.reservation_release"};
 
-  // related decode instance name(ID) list (used by PDOOCScheduler override)
+  // related decode instance name(ID) list
   std::vector<std::string> decode_inst_names_;
   // TODO later
   // std::vector<std::string> updated_decode_inst_names;

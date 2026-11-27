@@ -172,9 +172,6 @@ class Options {
   // enable disaggregated prefill-decode mode.
   PROPERTY(bool, enable_disagg_pd) = false;
 
-  // enable online-offline co-location in disaggregated prefill-decode mode.
-  PROPERTY(bool, enable_pd_ooc) = false;
-
   // instance role, support `DEFAULT`, `PREFILL`, `DECODE`, `MIX`
   PROPERTY(InstanceRole, instance_role) = InstanceRole::DEFAULT;
 
@@ -236,7 +233,6 @@ class Options {
 
   // enable RL sleep/wakeup memory mode (SleepableAllocator). Propagated from
   // the user-facing Options so that the engine and worker route the offline
-  // sleep()/wake_up() to the VMM-backed allocator instead of xtensor.
   PROPERTY(bool, enable_sleep_mode) = false;
 
   // disable per-request statistic logs.
@@ -286,7 +282,6 @@ class Options {
   PROPERTY(std::string, kv_cache_dtype) = "auto";
 
   // max concurrency for rec worker
-  PROPERTY(int32_t, rec_worker_max_concurrency) = 1;
 };
 
 }  // namespace runtime

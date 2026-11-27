@@ -21,15 +21,13 @@ limitations under the License.
 #include "runtime/xservice_client.h"
 #include "scheduler/continuous_scheduler.h"
 #include "scheduler/dit_scheduler.h"
-#include "scheduler/fixed_steps_scheduler.h"
 
 namespace xllm {
 
 enum class SchedulerKind : int8_t {
   CONTINUOUS = 0,
   ZERO_EVICTION = 4,
-  DISAGG_PD = 5,
-  PD_OOC = 7
+  DISAGG_PD = 5
 };
 
 SchedulerKind select_scheduler_kind(
@@ -42,9 +40,5 @@ std::unique_ptr<ContinuousScheduler> create_continuous_scheduler(
 std::unique_ptr<DiTScheduler> create_dit_scheduler(
     Engine* engine,
     DiTScheduler::Options options);
-
-std::unique_ptr<FixedStepsScheduler> create_fixed_steps_scheduler(
-    Engine* engine,
-    ContinuousScheduler::Options options);
 
 }  // namespace xllm

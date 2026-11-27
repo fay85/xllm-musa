@@ -38,7 +38,6 @@ cc_library(
   NAME
     layers
   HDRS
-    onerec_block_layer.h
     oxygen_vision_layer.h
     $<$<BOOL:${USE_NPU}>:deepseek_v4_decoder_layer.h>
     qwen2_decoder_layer.h

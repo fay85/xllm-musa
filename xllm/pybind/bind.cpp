@@ -196,7 +196,6 @@ PYBIND11_MODULE(xllm_export, m) {
       .def_readwrite("ep_size", &Options::ep_size_)
       .def_readwrite("instance_name", &Options::instance_name_)
       .def_readwrite("enable_disagg_pd", &Options::enable_disagg_pd_)
-      .def_readwrite("enable_pd_ooc", &Options::enable_pd_ooc_)
       .def_readwrite("enable_schedule_overlap",
                      &Options::enable_schedule_overlap_)
       .def_readwrite("instance_role", &Options::instance_role_)
@@ -287,7 +286,6 @@ PYBIND11_MODULE(xllm_export, m) {
            &LLMMaster::get_rate_limiter,
            py::call_guard<py::gil_scoped_release>())
       // RL offline deep sleep/wakeup (SleepableAllocator path). Distinct from
-      // the xtensor-based online sleep/wakeup exposed via the brpc API service.
       .def(
           "sleep",
           [](LLMMaster& self) {

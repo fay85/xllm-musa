@@ -7,7 +7,6 @@ if(USE_NPU)
   )
 endif()
 add_subdirectory(batch)
-add_subdirectory(xtensor)
 add_subdirectory(block)
 add_subdirectory(config)
 add_subdirectory(chat_template)
@@ -62,5 +61,6 @@ cc_library(
   DEPS
     :platform
     torch
+    $<$<BOOL:${USE_NPU}>:atb_workspace>
     $<$<BOOL:${USE_NPU}>:torch_npu>
 )

@@ -124,7 +124,7 @@ std::optional<std::string> validate_model_cp(const Options& options,
       if (options.enable_graph() || options.enable_prefill_piecewise_graph()) {
         return "Python Qwen3-VL CP requires eager execution";
       }
-      if (options.enable_disagg_pd() || options.enable_pd_ooc() ||
+      if (options.enable_disagg_pd() ||
           options.instance_role() != InstanceRole::DEFAULT) {
         return "Python Qwen3-VL CP requires standalone DEFAULT execution";
       }
@@ -316,9 +316,6 @@ std::optional<std::string> validate_model_cp(const Options& options,
             options.instance_role() != InstanceRole::PREFILL) {
           return "Python GLM-5 Next CP with disaggregated PD requires the "
                  "PREFILL role";
-        }
-        if (options.enable_pd_ooc()) {
-          return "Python GLM-5 Next CP initially requires enable_pd_ooc=false";
         }
       }
       if (!kv_split_fits_cp_topology(

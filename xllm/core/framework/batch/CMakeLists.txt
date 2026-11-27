@@ -24,19 +24,11 @@ cc_library(
     batch.h
     batch_factory.h
     batch_input_builder.h
-    rec_batch_input_builder.h
-    onerec_batch_input_builder.h
-    onerec_xattention_batch_input_builder.h
-    rec_multi_round_batch_input_builder.h
   SRCS
     dit_batch.cpp
     batch.cpp
     batch_factory.cpp
     batch_input_builder.cpp
-    rec_batch_input_builder.cpp
-    onerec_batch_input_builder.cpp
-    onerec_xattention_batch_input_builder.cpp
-    rec_multi_round_batch_input_builder.cpp
     beam_search.h
   DEPS
     :config

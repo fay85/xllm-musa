@@ -37,7 +37,6 @@ limitations under the License.
 #include "core/framework/config/option_category.h"
 #include "core/framework/config/parallel_config.h"
 #include "core/framework/config/profile_config.h"
-#include "core/framework/config/rec_config.h"
 #include "core/framework/config/scheduler_config.h"
 #include "core/framework/config/service_config.h"
 #include "core/framework/config/speculative_config.h"
@@ -70,8 +69,7 @@ class HelpFormatter {
         ProfileConfig::option_category(),
         ExecutionConfig::option_category(),
         KernelConfig::option_category(),
-        DiTConfig::option_category(),
-        RecConfig::option_category()};
+        DiTConfig::option_category()};
     return kOptionCategories;
   }
 

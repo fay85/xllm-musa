@@ -45,9 +45,6 @@ struct XLLM_CAPI_EXPORT XLLM_InitLLMOptions {
   // Whether to enable disaggregated prefill and decode execution
   bool enable_disagg_pd = false;
 
-  // Whether to enable online-offline co-location in disaggregated PD mode
-  bool enable_pd_ooc = false;
-
   // Whether to enable schedule overlap
   bool enable_schedule_overlap = false;
 
@@ -273,9 +270,6 @@ struct XLLM_CAPI_EXPORT XLLM_Choice {
 
   // The generated text for completions inference
   std::optional<std::string> text;
-
-  // The generated item for rec inference
-  std::optional<uint64_t> item_id;
 
   // The generated message for chatcompletions inference
   std::optional<XLLM_ChatMessage> message;

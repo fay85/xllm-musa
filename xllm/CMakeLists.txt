@@ -66,13 +66,11 @@ if(GENERATE_SO)
       xllm
     HDRS
       c_api/llm.h
-      c_api/rec.h
       c_api/default.h
       c_api/types.h
       c_api/internal/helper.h
     SRCS
       c_api/internal/llm.cpp
-      c_api/internal/rec.cpp
       c_api/internal/helper.cpp
     DEPS
       :config

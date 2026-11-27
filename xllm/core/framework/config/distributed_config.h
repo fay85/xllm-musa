@@ -41,7 +41,6 @@ class DistributedConfig final {
   [[nodiscard]] static const OptionCategory& option_category() {
     static const OptionCategory kOptionCategory = {"DISTRIBUTED OPTIONS",
                                                    {"master_node_addr",
-                                                    "xtensor_master_node_addr",
                                                     "nnodes",
                                                     "node_rank",
                                                     "etcd_addr",
@@ -55,8 +54,6 @@ class DistributedConfig final {
   }
 
   PROPERTY(std::string, master_node_addr) = "127.0.0.1:19888";
-
-  PROPERTY(std::string, xtensor_master_node_addr) = "127.0.0.1:19889";
 
   PROPERTY(int32_t, nnodes) = 1;
 

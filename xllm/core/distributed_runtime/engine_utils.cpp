@@ -297,7 +297,6 @@ HostCacheValidationOptions build_host_cache_validation_options(
       .supports_host_kv_offload = Platform::supports_host_kv_offload(),
       .enable_prefix_cache = options.enable_prefix_cache(),
       .enable_disagg_pd = options.enable_disagg_pd(),
-      .enable_pd_ooc = options.enable_pd_ooc(),
       .enable_kvcache_store = options.enable_kvcache_store(),
       .instance_role = options.instance_role(),
       .has_key_cache_shape = kv_cache_shape.has_key_cache_shape(),

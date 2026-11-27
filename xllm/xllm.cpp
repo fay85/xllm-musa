@@ -50,7 +50,6 @@ limitations under the License.
 #include "core/framework/config/multimodal_config.h"
 #include "core/framework/config/parallel_config.h"
 #include "core/framework/config/profile_config.h"
-#include "core/framework/config/rec_config.h"
 #include "core/framework/config/scheduler_config.h"
 #include "core/framework/config/service_config.h"
 #include "core/framework/config/speculative_config.h"
@@ -62,9 +61,6 @@ limitations under the License.
     defined(USE_MUSA)
 #include "core/framework/kv_cache_transfer/mooncake_transfer_engine.h"
 #endif
-#include "core/framework/xtensor/global_xtensor.h"
-#include "core/framework/xtensor/options.h"
-#include "core/framework/xtensor/xtensor_allocator.h"
 #include "core/platform/device_name_utils.h"
 #if defined(USE_MLU)
 #include "core/kernels/mlu/bangc/include/deepseek_v41_constants.h"
@@ -149,10 +145,6 @@ void validate_jev_config(const ModelArgs& model_args) {
         << "Bidirectional Jev prompt attention requires "
            "--enable_disagg_pd=false; current value="
         << disagg_pd_config.enable_disagg_pd();
-    CHECK(!disagg_pd_config.enable_pd_ooc())
-        << "Bidirectional Jev prompt attention requires "
-           "--enable_pd_ooc=false; current value="
-        << disagg_pd_config.enable_pd_ooc();
     CHECK_EQ(disagg_pd_config.instance_role(), "DEFAULT")
         << "Bidirectional Jev prompt attention requires "
            "--instance_role=DEFAULT.";
@@ -179,7 +171,6 @@ void initialize_configs() {
   MultimodalConfig::get_instance().initialize();
   ParallelConfig::get_instance().initialize();
   ProfileConfig::get_instance().initialize();
-  RecConfig::get_instance().initialize();
   SchedulerConfig::get_instance().initialize();
   ServiceConfig::get_instance().initialize();
   SpeculativeConfig::get_instance().initialize();
@@ -206,7 +197,6 @@ Options create_options(const std::string& instance_name, bool is_local) {
   const KernelConfig& kernel_config = KernelConfig::get_instance();
   const DiTConfig& dit_config = DiTConfig::get_instance();
   const LoadConfig& load_config = LoadConfig::get_instance();
-  const RecConfig& rec_config = RecConfig::get_instance();
 
 #if !defined(USE_NPU)
   CHECK(!speculative_config.enable_mtp_draft_body_tp1())
@@ -283,7 +273,6 @@ Options create_options(const std::string& instance_name, bool is_local) {
           static_cast<int32_t>(parallel_config.text_encoder_tp_size()))
       .instance_name(instance_name)
       .enable_disagg_pd(disagg_pd_config.enable_disagg_pd())
-      .enable_pd_ooc(disagg_pd_config.enable_pd_ooc())
       .enable_schedule_overlap(scheduler_config.enable_schedule_overlap())
       .kv_cache_transfer_mode(disagg_pd_config.kv_cache_transfer_mode())
       .etcd_addr(distributed_config.etcd_addr())
@@ -343,8 +332,6 @@ Options create_options(const std::string& instance_name, bool is_local) {
       .output_shm_size(execution_config.output_shm_size())
       .beam_width(beam_search_config.beam_width())
       .kv_cache_dtype(kv_cache_config.kv_cache_dtype())
-      .rec_worker_max_concurrency(
-          static_cast<int32_t>(rec_config.rec_worker_max_concurrency()))
       .is_local(is_local);
 
   return options;
@@ -467,7 +454,6 @@ void validate_config(const std::string& model_type) {
     // data, expert, context and tensor parallelism as well as multi-node
     // topologies are allowed; the width guard remains the correctness net.
     XGrammarSupportInputs support_inputs;
-    support_inputs.enable_pd_ooc = disagg_pd_config.enable_pd_ooc();
     support_inputs.num_speculative_tokens =
         speculative_config.num_speculative_tokens();
     support_inputs.speculative_algorithm =
@@ -602,10 +588,9 @@ void validate_config(const std::string& model_type) {
                  << "Disabling enable_graph_double_buffer.";
     execution_config.enable_graph_double_buffer(false);
   }
-  // enable_xtensor / enable_rolling_load imply enable_manual_loader
-  if ((kv_cache_config.enable_xtensor() || load_config.enable_rolling_load()) &&
+  if (load_config.enable_rolling_load() &&
       !load_config.enable_manual_loader()) {
-    LOG(WARNING) << "enable_xtensor or enable_rolling_load requires "
+    LOG(WARNING) << "enable_rolling_load requires "
                     "enable_manual_loader; forcing enable_manual_loader=true.";
     load_config.enable_manual_loader(true);
   }
@@ -625,9 +610,6 @@ void validate_config(const std::string& model_type) {
                << "rolling_load_num_cached_layers.";
   }
 #else
-  if (kv_cache_config.enable_xtensor()) {
-    LOG(FATAL) << "enable_xtensor is only supported on NPU.";
-  }
   if (load_config.enable_manual_loader()) {
     LOG(FATAL) << "enable_manual_loader is only supported on NPU.";
   }
@@ -724,37 +706,6 @@ int run() {
   InstanceName::name()->set_name(options.instance_name().value_or(""));
 
   // master node
-  // init XTensor allocator and PhyPagePool for xtensor mode
-  if (kv_cache_config.enable_xtensor()) {
-    // Parse devices
-    const auto devices = DeviceNameUtils::parse_devices("auto");
-
-    // Initialize XTensorAllocator with first device
-    auto& allocator = XTensorAllocator::get_instance();
-    allocator.init(devices[0]);
-
-    // Setup distributed XTensor service for multi-GPU/multi-node
-    if (distributed_config.nnodes() > 1) {
-      xtensor::Options xtensor_options;
-      xtensor_options.devices(devices)
-          .nnodes(distributed_config.nnodes())
-          .node_rank(distributed_config.node_rank());
-      allocator.setup_multi_node_xtensor_dist(
-          xtensor_options,
-          distributed_config.xtensor_master_node_addr(),
-          parallel_config.dp_size());
-    }
-
-    // Initialize PhyPagePool on all workers
-    int64_t num_pages =
-        allocator.init_phy_page_pools(kv_cache_config.max_memory_utilization(),
-                                      kv_cache_config.max_cache_size());
-    if (num_pages <= 0) {
-      LOG(FATAL) << "Failed to initialize PhyPagePool";
-    }
-    LOG(INFO) << "XTensor initialized with " << num_pages << " physical pages";
-  }
-
   std::unique_ptr<Master> master =
       create_master(model_config.backend(), options);
   master->run();
@@ -765,7 +716,7 @@ int run() {
   std::string model_version = default_model_name;
   std::vector<std::string> model_versions = {model_version};
 
-  if (distributed_config.node_rank() == 0 || kv_cache_config.enable_xtensor()) {
+  if (distributed_config.node_rank() == 0) {
     auto api_service = std::make_unique<APIService>(
         master.get(), model_names, model_repository_names, model_versions);
     auto xllm_server =

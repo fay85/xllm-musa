@@ -658,10 +658,6 @@ std::optional<std::string> validate_host_cache_options(
         "an engine configuration that supports prefix caching");
   }
   if (options.enable_disagg_pd) {
-    if (options.enable_pd_ooc) {
-      violations.emplace_back(
-          "disaggregated host offload does not support PD-OOC");
-    }
   } else if (options.instance_role != InstanceRole::DEFAULT) {
     violations.emplace_back(
         "host offload outside disaggregated serving requires the DEFAULT "

@@ -29,7 +29,6 @@ The non-goals of this document are:
 
 Related design documents:
 
-- for a recommendation-oriented case study that focuses on fixed scheduling, multi-step execution, and custom operators, see: [Generative Recommendation Design Document](/en/design/generative_recommendation_design/)
 
 ## 1. Graph Mode Fundamentals
 
@@ -475,4 +474,3 @@ On 64-bit systems, virtual address space is usually much larger than single-devi
 - [CudaGraph capture mechanism](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#cuda-graphs)
 - [vLLM graph execution reference](https://github.com/vllm-project/vllm/blob/main/vllm/v1/worker/gpu/cudagraph_utils.py)
 - [SGLang graph execution reference](https://github.com/sgl-project/sglang/blob/main/python/sglang/srt/model_executor/cuda_graph_runner.py)
-

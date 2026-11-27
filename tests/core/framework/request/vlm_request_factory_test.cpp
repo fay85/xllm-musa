@@ -1012,10 +1012,8 @@ class TypedImageRequestTest : public ::testing::Test {
     key_.set_engine_uid("engine");
     key_.set_profile_digest("profile");
     key_.set_incarnation_id("incarnation");
-    options_.enable_service_routing(true)
-        .enable_disagg_pd(true)
-        .enable_pd_ooc(false)
-        .instance_role(InstanceRole::PREFILL);
+    options_.enable_service_routing(true).enable_disagg_pd(true).instance_role(
+        InstanceRole::PREFILL);
     factory_ = std::make_unique<VLMRequestFactory>(
         processor_.get(),
         &chat_template_,

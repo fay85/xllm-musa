@@ -112,17 +112,12 @@ The current bvar exporter flattens the role into the name, for example
 `xllm_pd_request_decode_microseconds_latency_role_decode`. These are
 LatencyRecorder counts/latency statistics, not Prometheus `_bucket` histograms.
 `role` identifies the executed phase, not the process's configured `instance_role`.
-An OOC Decode segment resumed on a Prefill-configured process remains `decode`;
-do not filter these series solely by process configuration or interpret them as
-the cumulative work of a dedicated Decode host.
 Importing P's Queue/Prefill on D does not sample them again. Requests already
 cancelled/failed at P sampling are excluded; an already sampled completed P stage
 is not retracted by a later handoff/Decode failure. D only samples successfully
 completed local segments. Unknown-boundary and unsupported multi-output/scoring
 requests are excluded from complete-stage samples. No newly committed local token means no Decode/TPOT
-sample, not an artificial zero. PD-OOC returns reset the local wait/token
-baseline: D statistics describe the final successfully completed local segment,
-not accumulated latency across all migration segments.
+sample, not an artificial zero.
 Do not sum these role-local stages into PD end-to-end latency: D Queue is a
 subinterval of D Decode, and inter-host transfer is not covered by these stages.
 

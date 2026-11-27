@@ -38,11 +38,8 @@ limitations under the License.
 
 #include "core/common/version_singleton.h"
 #include "core/framework/config/model_config.h"
-#include "core/framework/config/rec_config.h"
-#include "core/framework/state_dict/rec_vocab_dict.h"
 #include "core/framework/state_dict/safetensors/safetensors.h"
 #include "core/framework/tokenizer/fast_tokenizer.h"
-#include "core/framework/tokenizer/rec_tokenizer.h"
 #include "core/framework/tokenizer/sentencepiece_tokenizer.h"
 #include "core/framework/tokenizer/tiktoken_tokenizer.h"
 #include "core/framework/tokenizer/tokenizer_factory.h"
@@ -51,7 +48,6 @@ limitations under the License.
 #include "core/util/blocking_counter.h"
 #include "core/util/json_reader.h"
 #include "core/util/model_config_utils.h"
-#include "core/util/rec_model_utils.h"
 #include "core/util/scope_guard.h"
 #include "core/util/tensor_helper.h"
 #include "core/util/utils.h"
@@ -633,11 +629,6 @@ HFModelLoader::HFModelLoader(const std::string& model_weights_path)
       /*num_threads=*/32,
       /*cpu_binding=*/false,
       /*pool_name=*/"HFModelLoader.load_weights");
-  if (::xllm::ModelConfig::get_instance().backend() == "rec" &&
-      is_onerec_model_type(args_.model_type())) {
-    CHECK(load_rec_vocab(model_weights_path))
-        << "Failed to load rec content from " << model_weights_path;
-  }
 }
 
 std::unique_ptr<Tokenizer> HFModelLoader::tokenizer() const {
@@ -664,86 +655,6 @@ std::vector<std::unique_ptr<StateDict>>& HFModelLoader::get_state_dicts() {
     counter.wait();
   }
   return state_dicts_;
-}
-
-int64_t HFModelLoader::get_total_weight_size() const {
-  // find the index json file
-  std::string index_json_path;
-  for (const auto& entry :
-       std::filesystem::directory_iterator(model_weights_path_)) {
-    if (absl::EndsWith(entry.path().string(), ".index.json")) {
-      index_json_path = entry.path().string();
-      break;
-    }
-  }
-
-  if (index_json_path.empty()) {
-    LOG(ERROR) << "Failed to find .index.json file in " << model_weights_path_;
-    return -1;
-  }
-
-  JsonReader reader;
-  if (!reader.parse(index_json_path)) {
-    LOG(ERROR) << "Failed to parse json file " << index_json_path;
-    return -1;
-  }
-
-  auto total_size = reader.value<int64_t>("metadata.total_size");
-  if (!total_size.has_value()) {
-    LOG(ERROR) << "Failed to find metadata.total_size in " << index_json_path;
-    return -1;
-  }
-
-  int64_t result = total_size.value();
-
-  // When tie_word_embeddings is true, lm_head shares weight with word_embedding
-  // in the checkpoint, but we need to allocate memory for both during
-  // inference. Add the size of word_embedding weight (vocab_size * hidden_size
-  // * bytes_per_elem)
-  if (args_.tie_word_embeddings()) {
-    auto scalar_type = try_get_scalar_type_from_string(args_.dtype());
-    CHECK(scalar_type.has_value()) << "Unsupported dtype: " << args_.dtype();
-    int64_t bytes_per_elem = torch::elementSize(*scalar_type);
-    int64_t embedding_size =
-        args_.vocab_size() * args_.hidden_size() * bytes_per_elem;
-    result += embedding_size;
-    LOG(INFO) << "tie_word_embeddings is true, adding embedding weight size: "
-              << embedding_size << " bytes";
-  }
-
-  return result;
-}
-
-int64_t HFModelLoader::get_non_decoder_weight_size() const {
-  auto scalar_type = try_get_scalar_type_from_string(args_.dtype());
-  if (!scalar_type.has_value() ||
-      (*scalar_type != torch::kFloat16 && *scalar_type != torch::kBFloat16 &&
-       *scalar_type != torch::kFloat32 && *scalar_type != torch::kFloat64 &&
-       *scalar_type != torch::kInt8)) {
-    LOG(WARNING) << "get_non_decoder_weight_size: unsupported dtype "
-                 << args_.dtype() << ", falling back to total_weight_size";
-    return get_total_weight_size();
-  }
-  int64_t bytes_per_elem = torch::elementSize(*scalar_type);
-
-  // embed_tokens: vocab_size * hidden_size
-  int64_t embed_size =
-      args_.vocab_size() * args_.hidden_size() * bytes_per_elem;
-
-  // final norm: hidden_size
-  int64_t norm_size = args_.hidden_size() * bytes_per_elem;
-
-  // lm_head: vocab_size * hidden_size
-  // When tie_word_embeddings=true, lm_head shares the checkpoint weight with
-  // embed_tokens, but still gets its own device memory allocation at runtime.
-  int64_t lm_head_size =
-      args_.vocab_size() * args_.hidden_size() * bytes_per_elem;
-
-  int64_t result = embed_size + norm_size + lm_head_size;
-  LOG(INFO) << "get_non_decoder_weight_size: embed=" << embed_size
-            << " norm=" << norm_size << " lm_head=" << lm_head_size
-            << " total=" << result;
-  return result;
 }
 
 int64_t HFModelLoader::get_max_decoder_layer_weight_size() const {
@@ -864,40 +775,6 @@ int64_t HFModelLoader::get_max_decoder_layer_weight_size() const {
             << max_layer_size << ", observed_layers=" << observed_layers << "/"
             << args_.n_layers();
   return max_layer_size;
-}
-
-bool HFModelLoader::load_rec_vocab(const std::string& model_weights_path) {
-  if (!tokenizer_args_.vocab_file().empty()) {
-    std::filesystem::path path = model_weights_path;
-    std::string model_version = path.filename();
-    std::string vocab_full_path =
-        path.append(tokenizer_args_.vocab_file()).string();
-
-    LOG(INFO) << "Model_version: " << model_version
-              << ", vocab_full_path: " << vocab_full_path;
-
-    CHECK(nullptr != VersionSingleton<RecVocabDict>::GetInstance(model_version))
-        << "Failed to get vocab dict instance";
-    CHECK(VersionSingleton<RecVocabDict>::GetInstance(model_version)
-              ->initialize(vocab_full_path))
-        << "Failed to initialize vocab dict from " << vocab_full_path;
-  } else {
-    if (::xllm::RecConfig::get_instance().enable_constrained_decoding()) {
-      LOG(ERROR) << "Vocab file is not set for OneRec REC tokenizer under "
-                 << model_weights_path
-                 << ". Constrained decoding requires `vocab_file` in "
-                    "tokenizer_config.json.";
-      return false;
-    }
-
-    LOG(WARNING) << "Vocab file is not set for OneRec REC tokenizer under "
-                 << model_weights_path
-                 << ". Skip vocab dict initialization because constrained "
-                    "decoding is disabled.";
-    return true;
-  }
-
-  return true;
 }
 
 bool HFModelLoader::load_args(const std::string& model_weights_path) {

@@ -25,7 +25,6 @@ limitations under the License.
 namespace xllm {
 
 // Base class for Mooncake-based KV cache transfer.
-// Default and XTensor subclasses inherit this class (single inheritance).
 class MooncakeKVCacheTransferBase : public KVCacheTransfer {
  public:
   MooncakeKVCacheTransferBase(const int32_t device_id,
@@ -162,48 +161,6 @@ class MooncakeKVCacheTransferDefault final
   bool has_v_cache_ = true;
   BufLayout main_layout_;
   BufLayout spec_layout_;
-};
-
-class MooncakeKVCacheTransferXTensor final
-    : public MooncakeKVCacheTransferBase {
- public:
-  MooncakeKVCacheTransferXTensor(const int32_t device_id,
-                                 const uint16_t listen_port,
-                                 const torch::Device& device);
-
-  void set_model_id(const std::string& model_id) { model_id_ = model_id; }
-
-  void register_kv_cache(std::vector<xllm::KVCache>& kv_caches,
-                         const KVCacheShape& kv_cache_shape,
-                         const torch::ScalarType dtype) override;
-
-  bool pull_kv_blocks(const uint64_t src_cluster_id,
-                      const std::string& src_addr,
-                      const std::vector<KVTransferMapping>& mappings) override;
-
-  std::vector<KVTransferTaskResult> push_kv_blocks(
-      std::unordered_map<std::string, KVCacheInfo>& merged_kv_infos,
-      std::shared_ptr<KVPushSynchronizerImpl>& layer_synchronizer,
-      bool is_spec_draft,
-      int32_t kv_split_rank,
-      int32_t kv_split_size) override;
-
- private:
-  // Register GlobalXTensor memory region.
-  void register_kv_cache_impl();
-
-  bool pull_kv_blocks_impl(const std::string& src_addr,
-                           const std::vector<uint64_t>& src_blocks,
-                           const std::vector<uint64_t>& dst_blocks);
-
-  std::vector<KVTransferTaskResult> push_kv_blocks_impl(
-      std::unordered_map<std::string, KVCacheInfo>& merged_kv_infos,
-      std::shared_ptr<KVPushSynchronizerImpl>& layer_synchronizer,
-      bool is_spec_draft,
-      int32_t kv_split_rank,
-      int32_t kv_split_size);
-
-  std::string model_id_;
 };
 
 }  // namespace xllm

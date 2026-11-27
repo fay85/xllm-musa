@@ -199,7 +199,7 @@ std::string cache_contract(const ProviderDescriptorConfig& config,
 // backend) keep the same API surface as their base mode, matching
 // to_serving_mode() in api_service/serving_mode.h.
 // VLM modes additionally publish "multimodal_chat_completions": plain
-// "chat_completions" is also published by LLM and REC Engines, so it cannot
+// "chat_completions" is also published by LLM engines, so it cannot
 // alone route multimodal traffic. Requiring the extra feature word keeps
 // multimodal requests on multimodal Engines.
 // NOTE: text-only chat traffic does NOT carry required_api_features, so the
@@ -218,8 +218,6 @@ std::vector<std::string> api_features_for_backend(const std::string& backend) {
               "audio_generation",
               "text_generation",
               "video_generation"};
-    case EngineType::REC:
-      return {"completions", "chat_completions"};
     case EngineType::LLM:
     case EngineType::SSM:
       return {"chat_completions", "completions"};
@@ -839,9 +837,7 @@ collect_native_provider_descriptor_config(
           model_args, tp, dp, cp, static_cast<uint32_t>(kv_split_size)),
       .connector = connector,
       .connector_version = "builtin-" + runtime_version,
-      .scheduler_class = aggregated               ? "continuous"
-                         : disagg.enable_pd_ooc() ? "pd_ooc"
-                                                  : "disagg_pd",
+      .scheduler_class = aggregated ? "continuous" : "disagg_pd",
       .max_num_seqs = static_cast<uint32_t>(scheduler.max_seqs_per_batch()),
       .max_num_batched_tokens =
           static_cast<uint64_t>(scheduler.max_tokens_per_batch()),

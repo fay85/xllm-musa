@@ -272,7 +272,6 @@ void Request::create_sequences_group() {
   sequence_params.streaming = state_.stream;
   sequence_params.enable_schedule_overlap = state_.enable_schedule_overlap;
   sequence_params.is_graph_warmup = state_.is_graph_warmup;
-  sequence_params.rec_type = state_.rec_type;
   sequence_params.bos_token_id = state_.bos_token_id;
   sequence_params.request_id = request_id_;
   sequence_params.adapter_id = state_.adapter_id;
@@ -765,14 +764,6 @@ void Request::log_error_statistic(const Status& status,
               << ", request_elapsed_s: " << request_elapsed_s
               << ", local_enqueue_elapsed_s: " << local_enqueue_elapsed_s;
   }
-}
-
-size_t Request::total_num_blocks() {
-  size_t num = 0;
-  for (auto& seq : sequences()) {
-    num += seq->kv_state().num_blocks(BlockType::KV);
-  }
-  return num;
 }
 
 void Request::set_cancel() {

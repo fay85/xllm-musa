@@ -19,6 +19,7 @@ limitations under the License.
 
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -27,10 +28,14 @@ limitations under the License.
 #include "core/common/types.h"
 #include "core/util/binary_payload.h"
 #include "framework/request/dit_input_sources.h"
+#include "tensor.pb.h"
 
 namespace xllm {
 
 class ThreadPool;
+
+std::optional<TensorParameters> proto_to_tensor_parameters(
+    const proto::Tensor& proto_tensor);
 
 class DiTSourceDecoder final {
  public:

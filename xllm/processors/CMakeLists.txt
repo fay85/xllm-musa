@@ -95,5 +95,6 @@ cc_library(
     qwen3_omni_prompt_processor.cpp
   DEPS
     ${BASE_DEPS}
+    :models
     proto::xllm_proto
 )

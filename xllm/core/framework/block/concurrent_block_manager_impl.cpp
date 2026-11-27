@@ -31,7 +31,6 @@ ConcurrentBlockManagerImpl::ConcurrentBlockManagerImpl(
 std::vector<Block> ConcurrentBlockManagerImpl::allocate(size_t num_blocks) {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
   // BlockManagerImpl::allocate is final and pops its own free list.
-  // XTensor::allocate does its own page allocation. Neither calls back here.
   std::vector<Block> blocks = inner_->allocate(num_blocks);
   for (Block& block : blocks) {
     block.set_manager(this);

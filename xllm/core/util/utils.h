@@ -37,7 +37,6 @@ limitations under the License.
 #include "core/util/json_reader.h"
 #include "core/util/model_config_utils.h"
 #include "models/model_registry.h"
-#include "rec.pb.h"
 #include "slice.h"
 #include "tensor.pb.h"
 #include "worker.pb.h"
@@ -114,9 +113,6 @@ inline std::optional<int32_t> find_out_of_vocab_token(
 bool match_suffix(const Slice<int32_t>& data, const Slice<int32_t>& suffix);
 
 std::vector<uint32_t> cal_vec_split_index(uint32_t vec_size, uint32_t part_num);
-
-torch::Tensor convert_rec_tensor_to_torch(
-    const proto::InferInputTensor& input_tensor);
 
 torch::Tensor proto_to_torch(const proto::Tensor& proto_tensor);
 

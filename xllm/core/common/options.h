@@ -164,8 +164,6 @@ class Options {
 
   PROPERTY(bool, enable_disagg_pd) = false;
 
-  PROPERTY(bool, enable_pd_ooc) = false;
-
   PROPERTY(bool, enable_schedule_overlap) = true;
 
   PROPERTY(InstanceRole, instance_role) = InstanceRole::DEFAULT;
@@ -257,8 +255,7 @@ class Options {
 
   // Enable the RL sleep/wakeup memory mode (SleepableAllocator). When set, the
   // offline Python sleep()/wake_up() interface releases / re-acquires physical
-  // HBM via the VMM-backed allocator (vllm-ascend style), independent of the
-  // xtensor-based online sleep/wakeup path.
+  // Use the VMM-backed allocator for sleep and wakeup.
   PROPERTY(bool, enable_sleep_mode) = false;
 
   // disable per-request statistic logs.
@@ -300,9 +297,6 @@ class Options {
   // "auto" (default): KV cache dtype aligns with model dtype (no quantization).
   // "int8": Enables INT8 quantization. Only supported on MLU backend.
   PROPERTY(std::string, kv_cache_dtype) = "auto";
-
-  // max concurrency for rec worker
-  PROPERTY(int32_t, rec_worker_max_concurrency) = 1;
 
   PROPERTY(MasterStatus, master_status) = MasterStatus::WAKEUP;
 };

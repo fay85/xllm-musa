@@ -20,9 +20,7 @@ limitations under the License.
 #include <string>
 
 #include "core/common/global_flags.h"
-#include "core/framework/config/rec_config.h"
 #include "core/util/env_var.h"
-#include "core/util/rec_model_utils.h"
 #include "core/util/uuid.h"
 
 namespace xllm {
@@ -81,10 +79,6 @@ void set_init_options(BackendType backend_type,
       memcpy(xllm_init_options,
              &XLLM_INIT_LLM_OPTIONS_DEFAULT,
              sizeof(XLLM_InitOptions));
-    } else if (backend_type == BackendType::REC) {
-      memcpy(xllm_init_options,
-             &XLLM_INIT_REC_OPTIONS_DEFAULT,
-             sizeof(XLLM_InitOptions));
     }
   } else {
     memcpy(xllm_init_options, init_options, sizeof(XLLM_InitOptions));
@@ -102,11 +96,6 @@ void transfer_request_params(InferenceType inference_type,
         inference_type == InferenceType::LLM_CHAT_COMPLETIONS) {
       memcpy(&final_request_params,
              &XLLM_LLM_REQUEST_PARAMS_DEFAULT,
-             sizeof(XLLM_RequestParams));
-    } else if (inference_type == InferenceType::REC_COMPLETIONS ||
-               inference_type == InferenceType::REC_CHAT_COMPLETIONS) {
-      memcpy(&final_request_params,
-             &XLLM_REC_REQUEST_PARAMS_DEFAULT,
              sizeof(XLLM_RequestParams));
     }
   } else {
@@ -162,7 +151,6 @@ XLLM_Response* build_error_response(const std::string& request_id,
 
 XLLM_Response* build_success_response(const InferenceType& inference_type,
                                       const RequestOutput& output,
-                                      RecPipelineType rec_pipeline_type,
                                       const std::string& request_id,
                                       int64_t created_time,
                                       const std::string& model) {
@@ -174,52 +162,27 @@ XLLM_Response* build_success_response(const InferenceType& inference_type,
   XLLM_SET_META_STRING_FIELD(response->id, request_id);
   XLLM_SET_META_STRING_FIELD(response->model, model);
 
-  if (inference_type == InferenceType::LLM_COMPLETIONS ||
-      inference_type == InferenceType::REC_COMPLETIONS) {
+  if (inference_type == InferenceType::LLM_COMPLETIONS) {
     snprintf(response->object, sizeof(response->object), "text_completion");
-  } else if (inference_type == InferenceType::LLM_CHAT_COMPLETIONS ||
-             inference_type == InferenceType::REC_CHAT_COMPLETIONS) {
+  } else if (inference_type == InferenceType::LLM_CHAT_COMPLETIONS) {
     snprintf(response->object, sizeof(response->object), "chat.completion");
   }
 
   response->choices.entries_size = output.outputs.size();
   response->choices.entries = new XLLM_Choice[response->choices.entries_size]();
   CHECK(nullptr != response->choices.entries);
-  const bool is_rec_inference =
-      inference_type == InferenceType::REC_COMPLETIONS ||
-      inference_type == InferenceType::REC_CHAT_COMPLETIONS;
-  const bool is_onerec_pipeline =
-      is_rec_inference && is_onerec_pipeline_type(rec_pipeline_type);
-  if (is_onerec_pipeline) {
-    response->rec_outputs.entries_size = output.outputs.size();
-    response->rec_outputs.entries =
-        new XLLM_RecOutput[response->rec_outputs.entries_size]();
-    CHECK(nullptr != response->rec_outputs.entries);
-  }
-
-  int32_t total_item_count = 0;
-  const int32_t total_threshold =
-      ::xllm::RecConfig::get_instance().total_conversion_threshold();
 
   for (int i = 0; i < output.outputs.size(); i++) {
     const auto& seq_output = output.outputs[i];
     XLLM_Choice& choice = response->choices.entries[i];
     choice.index = seq_output.index;
-    XLLM_RecOutput* rec_output = nullptr;
-    if (response->rec_outputs.entries != nullptr) {
-      rec_output = &response->rec_outputs.entries[i];
-      rec_output->index = seq_output.index;
-    }
-
-    if (inference_type == InferenceType::LLM_COMPLETIONS ||
-        inference_type == InferenceType::REC_COMPLETIONS) {
+    if (inference_type == InferenceType::LLM_COMPLETIONS) {
       size_t text_len = seq_output.text.length();
       choice.text = new char[text_len + 1];
       CHECK(nullptr != choice.text);
       strncpy(choice.text, seq_output.text.c_str(), text_len + 1);
       choice.text[text_len] = '\0';
-    } else if (inference_type == InferenceType::LLM_CHAT_COMPLETIONS ||
-               inference_type == InferenceType::REC_CHAT_COMPLETIONS) {
+    } else if (inference_type == InferenceType::LLM_CHAT_COMPLETIONS) {
       choice.message = new XLLM_ChatMessage();
       CHECK(nullptr != choice.message);
 
@@ -256,52 +219,6 @@ XLLM_Response* build_success_response(const InferenceType& inference_type,
 
         xllm_logprob.token_id = logprob.token_id;
         xllm_logprob.logprob = logprob.logprob;
-      }
-    }
-
-    if (is_onerec_pipeline &&
-        ::xllm::RecConfig::get_instance().enable_convert_tokens_to_item() &&
-        rec_output != nullptr) {
-      size_t copied_item_count = 0;
-      if (!seq_output.item_ids_list.empty()) {
-        copied_item_count =
-            std::min(seq_output.item_ids_list.size(),
-                     static_cast<size_t>(
-                         std::max(total_threshold - total_item_count, 0)));
-        if (copied_item_count > 0) {
-          rec_output->item_ids_size = copied_item_count;
-          rec_output->item_ids = new int64_t[copied_item_count];
-          CHECK(nullptr != rec_output->item_ids);
-          for (size_t j = 0; j < copied_item_count; ++j) {
-            rec_output->item_ids[j] = seq_output.item_ids_list[j];
-          }
-          total_item_count += static_cast<int32_t>(copied_item_count);
-        }
-      } else if (seq_output.item_ids.has_value() &&
-                 total_item_count < total_threshold) {
-        rec_output->item_ids_size = 1;
-        rec_output->item_ids = new int64_t[1];
-        CHECK(nullptr != rec_output->item_ids);
-        rec_output->item_ids[0] = seq_output.item_ids.value();
-        ++total_item_count;
-      }
-    }
-
-    if (is_onerec_pipeline &&
-        ::xllm::RecConfig::get_instance().enable_output_sku_logprobs() &&
-        !seq_output.token_ids_logprobs.empty() && rec_output != nullptr) {
-      rec_output->rec_token_logprobs_size =
-          seq_output.token_ids_logprobs.size();
-      rec_output->rec_token_logprobs =
-          new float[rec_output->rec_token_logprobs_size];
-      CHECK(nullptr != rec_output->rec_token_logprobs);
-      for (size_t j = 0; j < rec_output->rec_token_logprobs_size; ++j) {
-        if (seq_output.token_ids_logprobs[j].has_value()) {
-          rec_output->rec_token_logprobs[j] =
-              seq_output.token_ids_logprobs[j].value();
-        } else {
-          rec_output->rec_token_logprobs[j] = 0.0f;
-        }
       }
     }
   }
@@ -351,15 +268,6 @@ XLLM_Response* handle_inference_request(
   xllm::RequestParams xllm_request_params;
   transfer_request_params(inference_type, request_params, &xllm_request_params);
   xllm_request_params.request_id = request_id;
-  RecPipelineType rec_pipeline_type = RecPipelineType::kLlmRecDefault;
-  if constexpr (std::is_same_v<HandlerType, XLLM_REC_Handler>) {
-    rec_pipeline_type = handler->pipeline_type;
-    if (::xllm::RecConfig::get_instance().enable_output_sku_logprobs() &&
-        is_onerec_pipeline_type(rec_pipeline_type)) {
-      xllm_request_params.logprobs = true;
-    }
-  }
-
   const int64_t created_time = absl::ToUnixSeconds(absl::Now());
 
   try {
@@ -370,7 +278,6 @@ XLLM_Response* handle_inference_request(
                                 request_id,
                                 created_time,
                                 inference_type,
-                                rec_pipeline_type,
                                 weak_promise = std::weak_ptr(promise_ptr)](
                                    const RequestOutput& req_output) -> bool {
       if (auto locked_promise = weak_promise.lock()) {
@@ -379,7 +286,6 @@ XLLM_Response* handle_inference_request(
             if (req_output.status.value().ok()) {
               locked_promise->setValue(build_success_response(inference_type,
                                                               req_output,
-                                                              rec_pipeline_type,
                                                               request_id,
                                                               created_time,
                                                               model_id));
@@ -414,31 +320,6 @@ XLLM_Response* handle_inference_request(
                                       xllm_request_params,
                                       std::nullopt,
                                       on_request_complete);
-    } else if constexpr (std::is_same_v<HandlerType, XLLM_REC_Handler>) {
-      if constexpr (std::is_same_v<InputType, std::vector<int>>) {
-        if (nullptr != extra) {
-          xllm::MMData* mm_data =
-              dynamic_cast<xllm::MMData*>(static_cast<xllm::MMData*>(extra));
-          CHECK(nullptr != mm_data);
-
-          std::optional<xllm::MMData> opt_mm_data = std::move(*mm_data);
-          handler->master->handle_request(
-              input, opt_mm_data, xllm_request_params, on_request_complete);
-
-        } else {
-          handler->master->handle_request("",
-                                          input,
-                                          std::nullopt,
-                                          xllm_request_params,
-                                          on_request_complete);
-        }
-      } else {
-        handler->master->handle_request(input,
-                                        std::nullopt,
-                                        std::nullopt,
-                                        xllm_request_params,
-                                        on_request_complete);
-      }
     } else {
       CHECK(false);
     }
@@ -514,24 +395,6 @@ void xllm_free_response(XLLM_Response* resp) {
   }
 
   resp->choices.entries_size = 0;
-  if (nullptr != resp->rec_outputs.entries) {
-    for (size_t i = 0; i < resp->rec_outputs.entries_size; ++i) {
-      XLLM_RecOutput& rec_output = resp->rec_outputs.entries[i];
-      if (nullptr != rec_output.item_ids) {
-        delete[] rec_output.item_ids;
-        rec_output.item_ids = nullptr;
-        rec_output.item_ids_size = 0;
-      }
-      if (nullptr != rec_output.rec_token_logprobs) {
-        delete[] rec_output.rec_token_logprobs;
-        rec_output.rec_token_logprobs = nullptr;
-        rec_output.rec_token_logprobs_size = 0;
-      }
-    }
-    delete[] resp->rec_outputs.entries;
-    resp->rec_outputs.entries = nullptr;
-  }
-  resp->rec_outputs.entries_size = 0;
   delete resp;
 
   return;
@@ -721,36 +584,5 @@ handle_inference_request<XLLM_LLM_Handler, std::vector<xllm::Message>>(
     uint32_t timeout_ms,
     const XLLM_RequestParams* request_params);
 
-// 3. REC Handler + const char* (REC completions)
-template XLLM_Response* handle_inference_request<XLLM_REC_Handler, const char*>(
-    XLLM_REC_Handler* handler,
-    InferenceType inference_type,
-    const std::string& model_id,
-    const char* const& input,
-    void* extra,
-    uint32_t timeout_ms,
-    const XLLM_RequestParams* request_params);
-
-// 4. REC Handler + std::vector<xllm::Message> (REC chat completions)
-template XLLM_Response*
-handle_inference_request<XLLM_REC_Handler, std::vector<xllm::Message>>(
-    XLLM_REC_Handler* handler,
-    InferenceType inference_type,
-    const std::string& model_id,
-    const std::vector<xllm::Message>& input,
-    void* extra,
-    uint32_t timeout_ms,
-    const XLLM_RequestParams* request_params);
-
-// 5. REC Handler + std::vector<int> (chat completions)
-template XLLM_Response*
-handle_inference_request<XLLM_REC_Handler, std::vector<int>>(
-    XLLM_REC_Handler* handler,
-    InferenceType inference_type,
-    const std::string& model_id,
-    const std::vector<int>& input,
-    void* extra,
-    uint32_t timeout_ms,
-    const XLLM_RequestParams* request_params);
 }  // namespace helper
 }  // namespace xllm

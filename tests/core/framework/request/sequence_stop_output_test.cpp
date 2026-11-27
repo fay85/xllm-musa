@@ -107,7 +107,6 @@ class SequenceStopOutputTest : public ::testing::Test {
     params.logprobs = logprobs;
     params.streaming = false;
     params.enable_schedule_overlap = enable_schedule_overlap;
-    params.rec_type = RecType::kNone;
     params.bos_token_id = 0;
     params.request_id = "stop_output_test";
     sampling_param_.logprobs = logprobs;

@@ -19,7 +19,6 @@ limitations under the License.
 #include <butil/at_exit.h>
 #include <unistd.h>
 
-#include <array>
 #include <csignal>
 
 #include "core/common/global_flags.h"
@@ -51,7 +50,6 @@ constexpr const char* kApiServiceRoutes =
     "v1/rerank => RerankHttp,"
     "v1/messages => AnthropicMessagesHttp,"
     "v2/repository/index => ModelVersionsHttp,"
-    "fork_master => ForkMasterHttp,"
     "sleep => SleepHttp,"
     "wakeup => WakeupHttp,"
     "start_profile => StartProfileHttp,"
@@ -60,39 +58,10 @@ constexpr const char* kApiServiceRoutes =
     "v1/unload_lora_adapter => UnloadLoraAdapterHttp,"
     "v1/lora_adapters => ListLoraAdaptersHttp,"
     "pause => PauseHttp,"
-    "resume => ResumeHttp,"
-    "link_p2p => LinkP2PHttp,"
-    "unlink_p2p => UnlinkP2PHttp";
-
-constexpr const char* kForkOnlyRoute = "fork_master => ForkMasterHttp";
-
-struct ApiRouteBinding {
-  const char* name;
-  bool (*enabled)();
-  const char* routes;
-};
+    "resume => ResumeHttp";
 
 bool is_master_node() {
   return ::xllm::DistributedConfig::get_instance().node_rank() == 0;
-}
-
-bool is_xtensor_node() {
-  return ::xllm::DistributedConfig::get_instance().node_rank() != 0 &&
-         ::xllm::KVCacheConfig::get_instance().enable_xtensor();
-}
-
-const char* get_api_service_routes_for_current_mode() {
-  static constexpr std::array<ApiRouteBinding, 2> kBindings = {{
-      {"master_node", &is_master_node, kApiServiceRoutes},
-      {"xtensor_node", &is_xtensor_node, kForkOnlyRoute},
-  }};
-  for (const auto& binding : kBindings) {
-    if (binding.enabled()) {
-      LOG(INFO) << "Use API route mode: " << binding.name;
-      return binding.routes;
-    }
-  }
-  return nullptr;
 }
 
 void install_quit_signal_handler() {
@@ -134,10 +103,10 @@ XllmServer::~XllmServer() {
 bool XllmServer::start(std::unique_ptr<APIService> service,
                        const std::function<void()>& on_quit) {
   server_ = std::make_unique<brpc::Server>();
-  if (const char* routes = get_api_service_routes_for_current_mode();
-      routes != nullptr) {
-    if (server_->AddService(
-            service.get(), brpc::SERVER_DOESNT_OWN_SERVICE, routes) != 0) {
+  if (is_master_node()) {
+    if (server_->AddService(service.get(),
+                            brpc::SERVER_DOESNT_OWN_SERVICE,
+                            kApiServiceRoutes) != 0) {
       LOG(ERROR) << "Fail to add api service";
       return false;
     }
@@ -218,26 +187,6 @@ bool XllmServer::start(std::unique_ptr<DisaggPDService> service) {
   return true;
 }
 
-bool XllmServer::start(std::unique_ptr<PDOOCService> service) {
-  std::string addr("");
-  if (!::xllm::ServiceConfig::get_instance().host().empty()) {
-    addr =
-        ::xllm::ServiceConfig::get_instance().host() + ":" +
-        std::to_string(::xllm::DisaggPDConfig::get_instance().disagg_pd_port());
-  }
-  if (!create_server((google::protobuf::Service*)(service.get()),
-                     addr,
-                     ::xllm::DisaggPDConfig::get_instance().disagg_pd_port(),
-                     "PD OOC")) {
-    return false;
-  }
-
-  has_initialized_ = true;
-  // Wait until Ctrl-C is pressed, then Stop() and Join() the server.
-  server_->Join();
-  return true;
-}
-
 bool XllmServer::start(std::shared_ptr<CollectiveService> service,
                        const std::string& addr,
                        const std::string& server_name) {
@@ -261,14 +210,6 @@ bool XllmServer::start(std::shared_ptr<WorkerService> service,
                        addr,
                        -1,
                        "DistributeWorker");
-}
-
-bool XllmServer::start(std::shared_ptr<XTensorDistService> service,
-                       const std::string& addr) {
-  return create_server(static_cast<google::protobuf::Service*>(service.get()),
-                       addr,
-                       -1,
-                       "XTensorDist");
 }
 
 bool XllmServer::create_server(google::protobuf::Service* service,

@@ -40,7 +40,6 @@ limitations under the License.
 #include "runtime/llm_worker_impl.h"
 #include "runtime/mm_embed_vlm_worker_impl.h"
 #include "runtime/mtp_worker_impl.h"
-#include "runtime/rec_worker_impl.h"
 #include "runtime/suffix_worker_impl.h"
 #include "runtime/vlm_worker_impl.h"
 #include "util/timer.h"
@@ -81,8 +80,6 @@ Worker::Worker(const ParallelArgs& parallel_args,
     impl_ = new EmbedWorkerImpl(parallel_args, device, options);
   } else if (worker_type == WorkerType::EVLM) {
     impl_ = new EmbedVLMWorkerImpl(parallel_args, device, options);
-  } else if (worker_type == WorkerType::REC) {
-    impl_ = new RecWorkerImpl(parallel_args, device, options);
   } else if (worker_type == WorkerType::MMEVLM) {
     impl_ = new MMEmbedVLMWorkerImpl(parallel_args, device, options);
   } else if (worker_type == WorkerType::DIT) {
@@ -120,14 +117,6 @@ bool Worker::unlink_cluster(const std::vector<uint64_t>& cluster_ids,
                             const std::vector<std::string>& addrs,
                             const std::vector<uint16_t>& ports) {
   return impl_->unlink_cluster(cluster_ids, addrs, ports);
-}
-
-bool Worker::link_p2p(const std::string& remote_addr) {
-  return impl_->link_p2p(remote_addr);
-}
-
-bool Worker::unlink_p2p(const std::string& remote_addr) {
-  return impl_->unlink_p2p(remote_addr);
 }
 
 std::tuple<int64_t, int64_t> Worker::estimate_kv_cache_capacity() {

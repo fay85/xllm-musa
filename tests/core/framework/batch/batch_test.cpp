@@ -115,14 +115,6 @@ TransferKVInfo make_info(const std::vector<uint64_t>& remote_ids,
   return info;
 }
 
-XTensorLayerOffsets make_offsets(const std::vector<uint64_t>& k_offsets,
-                                 const std::vector<uint64_t>& v_offsets) {
-  XTensorLayerOffsets offsets;
-  offsets.k_offsets = k_offsets;
-  offsets.v_offsets = v_offsets;
-  return offsets;
-}
-
 const KVTransferMapping& find_mapping(const TransferKVInfo& info,
                                       BlockType block_type) {
   const int32_t group_id = cache_group_id(block_type);
@@ -414,8 +406,6 @@ TEST(BatchInputBuilderTest, FlatRemoteSharedPrefixUsesTrimmedRemoteMapping) {
 
   TransferKVInfo full_info = make_info({102, 103, 104});
   full_info.mappings[0].remote_shared_num = 2;
-  full_info.dst_xtensor_layer_offsets = {
-      make_offsets({1002, 1003, 1004}, {2002, 2003, 2004})};
 
   const TransferKVInfo info =
       build_transfer_input(full_info, &sequence, /*num_tokens=*/80);
@@ -424,11 +414,6 @@ TEST(BatchInputBuilderTest, FlatRemoteSharedPrefixUsesTrimmedRemoteMapping) {
   expect_mapping(info, BlockType::KV, expected_local, {102, 103, 104});
   EXPECT_EQ(find_mapping(info, BlockType::KV).remote_shared_num, 2u);
   EXPECT_EQ(sequence.kv_state().next_transfer_block_idx(), 5u);
-  ASSERT_EQ(info.dst_xtensor_layer_offsets.size(), 1u);
-  EXPECT_EQ(info.dst_xtensor_layer_offsets[0].k_offsets,
-            (std::vector<uint64_t>{1002, 1003, 1004}));
-  EXPECT_EQ(info.dst_xtensor_layer_offsets[0].v_offsets,
-            (std::vector<uint64_t>{2002, 2003, 2004}));
 }
 
 TEST(BatchInputBuilderTest, GroupedKvRemoteSharedPrefixUsesFullMapping) {
@@ -487,83 +472,6 @@ TEST(BatchInputBuilderTest, RemoteSWASentinelsAreNotTransferred) {
   expect_mapping(info, BlockType::SWA, {ids[2], ids[3]}, {102, 103});
   EXPECT_EQ(sequence.kv_state().next_group_transfer_block_idx(BlockType::SWA),
             4u);
-}
-
-TEST(BatchInputBuilderTest, LaterChunkSlicesXTensorOffsets) {
-  BlockManager::Options options;
-  options.num_blocks(8).block_size(16);
-  BlockManagerImpl manager(options);
-  std::vector<Block> blocks = manager.allocate(4);
-  const std::vector<uint64_t> ids = block_ids(blocks);
-  Sequence sequence = make_basic_sequence(std::vector<int32_t>(64, 1),
-                                          /*index=*/0,
-                                          /*timing=*/nullptr,
-                                          /*request_id=*/"req_0");
-  sequence.kv_state().add_blocks(BlockType::KV, std::move(blocks));
-  TransferKVInfo full_info = make_info({100, 101, 102, 103, 104});
-  full_info.dst_xtensor_layer_offsets = {
-      make_offsets({1000, 1001, 1002, 1003, 1004},
-                   {2000, 2001, 2002, 2003, 2004}),
-      make_offsets({3000, 3001, 3002, 3003, 3004},
-                   {4000, 4001, 4002, 4003, 4004})};
-  const TransferKVInfo first =
-      build_transfer_input(full_info, &sequence, /*num_tokens=*/32);
-  ASSERT_EQ(sequence.kv_state().kv_cache_tokens_num(), 32u);
-  ASSERT_EQ(sequence.kv_state().next_transfer_block_idx(), 2u);
-  ASSERT_EQ(find_mapping(first, BlockType::KV).local_ids.size(), 2u);
-  const TransferKVInfo info =
-      build_transfer_input(full_info, &sequence, /*num_tokens=*/32);
-
-  expect_mapping(info, BlockType::KV, {ids[2], ids[3]}, {102, 103});
-  EXPECT_EQ(sequence.kv_state().next_transfer_block_idx(), 4u);
-  ASSERT_EQ(info.dst_xtensor_layer_offsets.size(), 2u);
-  EXPECT_EQ(info.dst_xtensor_layer_offsets[0].k_offsets,
-            (std::vector<uint64_t>{1002, 1003}));
-  EXPECT_EQ(info.dst_xtensor_layer_offsets[0].v_offsets,
-            (std::vector<uint64_t>{2002, 2003}));
-  EXPECT_EQ(info.dst_xtensor_layer_offsets[1].k_offsets,
-            (std::vector<uint64_t>{3002, 3003}));
-  EXPECT_EQ(info.dst_xtensor_layer_offsets[1].v_offsets,
-            (std::vector<uint64_t>{4002, 4003}));
-}
-
-TEST(BatchInputBuilderTest, PartialBoundaryRepeatsXTensorOffsets) {
-  BlockManager::Options options;
-  options.num_blocks(8).block_size(16);
-  BlockManagerImpl manager(options);
-  std::vector<Block> blocks = manager.allocate(3);
-  const std::vector<uint64_t> ids = block_ids(blocks);
-  Sequence sequence = make_basic_sequence(std::vector<int32_t>(48, 1),
-                                          /*index=*/0,
-                                          /*timing=*/nullptr,
-                                          /*request_id=*/"req_0");
-  sequence.kv_state().add_blocks(BlockType::KV, std::move(blocks));
-  TransferKVInfo full_info = make_info({100, 101, 102});
-  full_info.dst_xtensor_layer_offsets = {
-      make_offsets({1000, 1001, 1002}, {2000, 2001, 2002}),
-      make_offsets({3000, 3001, 3002}, {4000, 4001, 4002})};
-  const TransferKVInfo info =
-      build_transfer_input(full_info, &sequence, /*num_tokens=*/33);
-
-  expect_mapping(info, BlockType::KV, ids, {100, 101, 102});
-  EXPECT_EQ(sequence.kv_state().next_transfer_block_idx(), 2u);
-  ASSERT_EQ(info.dst_xtensor_layer_offsets.size(), 2u);
-  EXPECT_EQ(info.dst_xtensor_layer_offsets[0].k_offsets,
-            (std::vector<uint64_t>{1000, 1001, 1002}));
-  EXPECT_EQ(info.dst_xtensor_layer_offsets[0].v_offsets,
-            (std::vector<uint64_t>{2000, 2001, 2002}));
-  EXPECT_EQ(info.dst_xtensor_layer_offsets[1].k_offsets,
-            (std::vector<uint64_t>{3000, 3001, 3002}));
-  EXPECT_EQ(info.dst_xtensor_layer_offsets[1].v_offsets,
-            (std::vector<uint64_t>{4000, 4001, 4002}));
-  const TransferKVInfo next =
-      build_transfer_input(full_info, &sequence, /*num_tokens=*/15);
-  expect_mapping(next, BlockType::KV, {ids[2]}, {102});
-  EXPECT_EQ(next.dst_xtensor_layer_offsets[0].k_offsets,
-            (std::vector<uint64_t>{1002}));
-  EXPECT_EQ(next.dst_xtensor_layer_offsets[1].v_offsets,
-            (std::vector<uint64_t>{4002}));
-  EXPECT_EQ(sequence.kv_state().next_transfer_block_idx(), 3u);
 }
 
 TEST(BatchInputBuilderTest, RemoteCoverageShortageDies) {

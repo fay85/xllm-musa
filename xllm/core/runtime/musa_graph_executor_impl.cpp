@@ -35,7 +35,6 @@ limitations under the License.
 
 #include "core/common/metrics.h"
 #include "core/framework/config/execution_config.h"
-#include "core/framework/config/rec_config.h"
 #include "core/framework/model/model_args.h"
 #include "core/kernels/musa/gdn_ops.h"
 #include "core/kernels/musa/musa_ops_api.h"
@@ -50,7 +49,6 @@ limitations under the License.
 #include "core/platform/vmm_torch_allocator.h"
 #include "core/runtime/decode_graph_bucket.h"
 #include "core/util/env_var.h"
-#include "core/util/rec_model_utils.h"
 #include "core/util/utils.h"
 
 namespace xllm::runtime::musa {
@@ -257,16 +255,7 @@ MusaGraphPersistentParam::MusaGraphPersistentParam(
   const int64_t max_tokens_per_batch = options.max_tokens_per_batch();
   // Round the sequence capacity to the same bucket used by graph execution so
   // the largest configured decode batch can be padded safely.
-  int64_t max_seqs_per_batch;
-  if (is_rec_multi_round_mode()) {
-    // max_seqs_per_batch is the max sequence count per Batch in a scheduler
-    // group.
-    // When is_rec_multi_round_mode() == true, multiply by beam_width to account
-    // for beam search.
-    max_seqs_per_batch = options.max_seqs_per_batch() * options_.beam_width();
-  } else {
-    max_seqs_per_batch = options.max_seqs_per_batch();
-  }
+  int64_t max_seqs_per_batch = options.max_seqs_per_batch();
   if (is_qwen3_5_mtp_model_type(args_.model_type())) {
     // The first draft step has a repair row and a current row per request.
     max_seqs_per_batch *= 2;
@@ -348,8 +337,7 @@ bool MusaGraphPersistentParam::can_use_llm_decode_fast_path(
     const torch::Tensor& positions,
     const ModelInputParams& params,
     const layer::Fa3AttentionMetadata& fa3_metadata) const {
-  if (!params.meta.batch_forward_type.is_decode() || positions.dim() != 1 ||
-      is_rec_multi_round_mode() || params.has_llmrec_params()) {
+  if (!params.meta.batch_forward_type.is_decode() || positions.dim() != 1) {
     return false;
   }
   const bool device_token_metadata_ok =
@@ -561,14 +549,11 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
   int64_t actual_batch_size = params.meta.num_sequences;
   if (params.meta.actual_num_sequences > 0) {
     actual_batch_size = params.meta.actual_num_sequences;
-  } else if (params.meta.batch_forward_type.is_decode() &&
-             !is_rec_multi_round_mode()) {
+  } else if (params.meta.batch_forward_type.is_decode()) {
     actual_batch_size = static_cast<int64_t>(actual_num_tokens);
   }
   // Validate row capacity before updating any persistent graph inputs.
-  const int64_t actual_block_table_batch =
-      is_rec_multi_round_mode() ? params.attention.device.block_tables.size(0)
-                                : actual_batch_size;
+  const int64_t actual_block_table_batch = actual_batch_size;
   CHECK_LE(actual_block_table_batch, persistent_block_tables_.size(0))
       << "block_tables exceeds the persistent graph row capacity";
   // Only decode has one block-table row per padded query token. Verify has
@@ -600,13 +585,12 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
           << "spec verify accepted prefix length exceeds checkpoint width";
     }
   }
-  const bool pad_linear_state = params.meta.batch_forward_type.is_decode() &&
-                                !params.is_spec_verify &&
-                                !is_rec_multi_round_mode();
+  const bool pad_linear_state =
+      params.meta.batch_forward_type.is_decode() && !params.is_spec_verify;
   const int64_t linear_state_rows = pad_linear_state && padded_num_tokens > 0
                                         ? padded_num_tokens
                                         : actual_batch_size;
-  if (has_linear_state && !is_rec_multi_round_mode()) {
+  if (has_linear_state) {
     CHECK_GE(linear_state_rows, actual_batch_size);
     CHECK_GE(persistent_linear_state_indices_.numel(), linear_state_rows)
         << "Linear state graph bucket exceeds persistent capacity";
@@ -666,7 +650,7 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
       params_for_capture->embedding.input_embedding =
           persistent_embedding(padded_num_tokens);
     }
-    if (has_linear_state && !is_rec_multi_round_mode()) {
+    if (has_linear_state) {
       params_for_capture->embedding.linear_state_indices =
           persistent_linear_state_indices(
               static_cast<uint32_t>(linear_state_rows));
@@ -742,7 +726,7 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
     }
   }
 
-  if (!is_rec_multi_round_mode() && !use_llm_decode_fast_path) {
+  if (!use_llm_decode_fast_path) {
     // q_seq_lens is q_cu_seq_lens in GPU Model.
     // kv_seq_lens is kv_cu_seq_lens in GPU Model.
     VLOG(kGraphExecutorLogVerboseLevel)
@@ -819,7 +803,7 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
         persistent_new_cache_slots(slot_mapping_tokens);
   }
 
-  if (!is_rec_multi_round_mode() && has_linear_state) {
+  if (has_linear_state) {
     torch::Tensor live_indices = persistent_linear_state_indices_.narrow(
         /*dim=*/0, /*start=*/0, /*length=*/actual_batch_size);
     if (params.embedding.linear_state_indices.defined()) {
@@ -852,9 +836,7 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
                /*non_blocking=*/true);
   }
 
-  // Copy block table data. In rec multi-round, block_tables may already be
-  // expanded to batch_size * beam_width rows while num_sequences still tracks
-  // the logical request count. Use the tensor's real row count here.
+  // Copy block table data.
   CHECK_GE(params.attention.device.block_tables.size(0),
            actual_block_table_batch)
       << "block_tables has fewer rows than the logical graph batch";
@@ -929,11 +911,6 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
     }
   }
 
-  const bool is_decode_with_llmrec =
-      params.meta.batch_forward_type.is_decode() && params.has_llmrec_params();
-  const bool use_two_stage_decode =
-      !::xllm::RecConfig::get_instance().enable_xattention_one_stage() &&
-      is_decode_with_llmrec;
   const int32_t head_dim = args_.head_dim();
   const int64_t tp_size =
       options_.world_size() / std::max(options_.dp_size(), 1);
@@ -973,10 +950,6 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
                                                        /*is_decode=*/true,
                                                        sliding_window);
 
-  if (use_two_stage_decode) {
-    LOG(FATAL) << "two-stage xattention decode is not supported in "
-                  "MUSA builds.";
-  }
   if (use_llm_decode_fast_path) {
     const uint32_t slot_mapping_tokens =
         padded_num_tokens > 0 ? padded_num_tokens : actual_num_tokens;
@@ -1909,10 +1882,8 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
     const int64_t max_seq_len = args_.max_position_embeddings();
     const bool seq_len_supported = params.meta.kv_max_seq_len <= max_seq_len;
     const int64_t graph_batch_size =
-        is_rec_multi_round_mode() ? params.attention.device.block_tables.size(0)
-                                  : (params.meta.actual_num_sequences > 0
-                                         ? params.meta.actual_num_sequences
-                                         : static_cast<int64_t>(n_tokens));
+        (params.meta.actual_num_sequences > 0 ? params.meta.actual_num_sequences
+                                              : static_cast<int64_t>(n_tokens));
     const int64_t graph_row_capacity =
         persistent_param_->persistent_block_tables(/*actual_batch_size=*/0)
             .size(0);

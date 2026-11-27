@@ -21,8 +21,8 @@ limitations under the License.
 #include <cstring>
 #include <string>
 
-// --- Server + XLLM_InitOptions gflags (defaults aligned with REC defaults) ---
-DEFINE_string(model_path, "", "Path to REC model weights");
+// --- Server + XLLM_InitOptions gflags (LLM test settings) ---
+DEFINE_string(model_path, "", "Path to LLM model weights");
 DEFINE_int32(port, 8000, "brpc TCP port");
 DEFINE_string(listen_addr,
               "",
@@ -30,15 +30,10 @@ DEFINE_string(listen_addr,
 DEFINE_int32(idle_timeout_s,
              -1,
              "brpc connection idle timeout in seconds; -1 = no limit");
-DEFINE_string(backend,
-              "rec",
-              "C API mode for xllm_test: \"llm\" (c_api/llm.h) or \"rec\" "
-              "(c_api/rec.h); only one is loaded");
 
 DEFINE_bool(enable_chunked_prefill, false, "");
 DEFINE_bool(enable_prefix_cache, false, "");
 DEFINE_bool(enable_disagg_pd, false, "");
-DEFINE_bool(enable_pd_ooc, false, "");
 DEFINE_bool(enable_schedule_overlap, false, "");
 DEFINE_bool(enable_shm, false, "");
 
@@ -145,7 +140,6 @@ void ApplyGflagsToXllmInitOptions(XLLM_InitOptions* o) {
   o->enable_chunked_prefill = FLAGS_enable_chunked_prefill;
   o->enable_prefix_cache = FLAGS_enable_prefix_cache;
   o->enable_disagg_pd = FLAGS_enable_disagg_pd;
-  o->enable_pd_ooc = FLAGS_enable_pd_ooc;
   o->enable_schedule_overlap = FLAGS_enable_schedule_overlap;
   o->enable_shm = FLAGS_enable_shm;
 

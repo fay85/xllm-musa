@@ -27,9 +27,6 @@ limitations under the License.
 #include "core/framework/config/kv_cache_config.h"
 #include "framework/model/model_input_params.h"
 #include "framework/prefix_cache/prefix_cache_journal.h"
-#include "framework/xtensor/page_allocator.h"
-#include "framework/xtensor/phy_page_pool.h"
-#include "framework/xtensor/xtensor_block_manager_impl.h"
 #include "linear_state_block_manager.h"
 #include "util/utils.h"
 
@@ -60,7 +57,6 @@ BlockManagerPool::BlockManagerPool(const Options& options, int32_t dp_size)
       .manager_types(options_.manager_types())
       .max_seqs_per_batch(options_.max_seqs_per_batch())
       .hasher_type(options_.hasher_type())
-      .enable_xtensor(options_.enable_xtensor())
       .num_layers(options_.num_layers())
       .slot_size(options_.slot_size())
       .model_id(options_.model_id())
@@ -73,13 +69,6 @@ BlockManagerPool::BlockManagerPool(const Options& options, int32_t dp_size)
       .instance_is_decode(options_.instance_is_decode());
 
   for (int32_t i = 0; i < dp_size; ++i) {
-    // The pool always holds a CompositeBlockManager. Its KV leaf is a flat
-    // BlockManagerImpl, or an XTensorBlockManagerImpl when enable_xtensor (the
-    // builder picks); the grouped leaves come from manager_types -- V4's
-    // SWA / KV; the LINEAR leaf is added by the
-    // builder when enable_linear_state. The per-sequence
-    // EMBEDDING resource leaf is appended here under the EMBEDDING key when
-    // spec decode needs it. Every leaf is routed by its BlockType.
     auto leaves = build_composite_leaves(block_options, /*dp_rank=*/i);
     if (options_.num_speculative_tokens() > 0) {
       // EMBEDDING uses the same wrapper as the other leaves when sequence-level
@@ -176,8 +165,7 @@ void BlockManagerPool::deallocate(Sequence* sequence) {
   DCHECK(sequence != nullptr);
   int32_t dp_rank = get_dp_rank(sequence);
   // The composite fans deallocate (with final cache) out across all leaves,
-  // including the EMBEDDING resource leaf, the LINEAR leaf, and the (flat or
-  // xtensor) KV leaf.
+  // including the EMBEDDING, LINEAR and KV leaves.
   auto* composite =
       static_cast<CompositeBlockManager*>(block_managers_[dp_rank].get());
   composite->deallocate_for_sequence(sequence);
@@ -375,7 +363,7 @@ void BlockManagerPool::cache(Sequence* sequence, size_t num_tokens) {
   }
   int32_t dp_rank = get_dp_rank(sequence);
   // Fan out the in-batch publish to the prefix leaf (KV); the composite no-ops
-  // for shapes without a prefix-capable KV leaf (DSV4 / xtensor).
+  // for shapes without a prefix-capable KV leaf (DSV4).
   static_cast<CompositeBlockManager*>(block_managers_[dp_rank].get())
       ->cache_for_sequence(sequence, num_tokens);
 }
@@ -501,8 +489,6 @@ void BlockManagerPool::add_pool_metrics(const CompositeBlockManager& manager,
     }
     kv_cache_pool_metrics_.emplace_back(
         PoolMetric{entry.leaf.get(),
-                   options_.enable_xtensor() && type == BlockType::KV &&
-                       std::string_view(memory_type) == "device",
                    {model_id,
                     std::to_string(options_.server_idx()),
                     std::to_string(dp_rank),
@@ -514,30 +500,13 @@ void BlockManagerPool::add_pool_metrics(const CompositeBlockManager& manager,
 void BlockManagerPool::report_pool_occupancy() const {
   for (const auto& metric : kv_cache_pool_metrics_) {
     // Physically occupied resources include evictable prefix-cache residents.
-    // XTensor has virtual capacity, so keep its existing used-block count.
     const BlockManager& manager = *metric.manager_;
     const size_t occupied =
-        metric.use_used_blocks_
-            ? manager.num_used_blocks()
-            : manager.num_total_blocks() - manager.num_free_blocks();
+        manager.num_total_blocks() - manager.num_free_blocks();
     set_multi_gauge_value(MULTI_GAUGE_kv_cache_pool_occupied_resources,
                           metric.labels_,
                           static_cast<double>(occupied));
   }
-}
-
-void BlockManagerPool::reserve_xtensor_padding_blocks() {
-  if (!options_.enable_xtensor()) {
-    return;
-  }
-  // The xtensor KV leaf is a CompositeBlockManager leaf now; fan the padding
-  // reservation out through the composite (no dynamic_cast). Non-xtensor leaves
-  // inherit the empty base default and are no-ops.
-  for (auto& manager : block_managers_) {
-    manager->reserve_xtensor_padding_blocks();
-  }
-  // Start prealloc thread once (PageAllocator is shared by all managers).
-  PageAllocator::get_instance().start_prealloc_thread();
 }
 
 }  // namespace xllm

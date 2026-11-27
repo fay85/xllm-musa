@@ -30,7 +30,6 @@ limitations under the License.
 #include "core/layers/common/attention_metadata_builder.h"
 #include "core/layers/common/lm_head.h"
 #include "core/layers/common/rms_norm.h"
-#include "core/util/rec_model_utils.h"
 #include "models/llm/lora_bootstrap.h"
 #include "models/model_registry.h"
 
@@ -91,20 +90,6 @@ class LlmModelImplBase : public torch::nn::Module {
           apply_mrope(positions);
     }
 
-    const LlmRecMultiRoundParams* llmrec_params = nullptr;
-    if (is_rec_multi_round_mode() &&
-        modified_input_params.has_llmrec_params()) {
-      llmrec_params = modified_input_params.llmrec_params();
-      CHECK_EQ(llmrec_params->full_k_caches.size(), layers_.size())
-          << "Rec multi-round mode requires full_k_caches per layer.";
-      CHECK_EQ(llmrec_params->full_v_caches.size(), layers_.size())
-          << "Rec multi-round mode requires full_v_caches per layer.";
-      CHECK_EQ(llmrec_params->unshared_k_caches.size(), layers_.size())
-          << "Rec multi-round mode requires unshared_k_caches per layer.";
-      CHECK_EQ(llmrec_params->unshared_v_caches.size(), layers_.size())
-          << "Rec multi-round mode requires unshared_v_caches per layer.";
-    }
-
     // Multi-tenant LoRA: push a LoRAContext frame so LoRA-wrapped
     // Linear layers (QKV / o_proj / gate_up / down) can read the
     // per-batch adapter routing without extending Linear::forward.
@@ -135,12 +120,6 @@ class LlmModelImplBase : public torch::nn::Module {
         return ModelOutput();
       }
       set_lora_context_layer(static_cast<int32_t>(i));
-      if (llmrec_params != nullptr) {
-        attn_metadata.full_k_cache = llmrec_params->full_k_caches[i];
-        attn_metadata.full_v_cache = llmrec_params->full_v_caches[i];
-        attn_metadata.unshared_k_cache = llmrec_params->unshared_k_caches[i];
-        attn_metadata.unshared_v_cache = llmrec_params->unshared_v_caches[i];
-      }
 #if defined(USE_CUDA)
       attn_metadata.plan_info->layer_id = i;
 #endif

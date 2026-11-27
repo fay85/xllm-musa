@@ -32,7 +32,6 @@ cc_library(
     llm_request_factory.h
     structured_output_compiler.h
     vlm_request_factory.h
-    rec_request_factory.h
     dit_request.h
     request_output.h
     usage.h
@@ -45,7 +44,6 @@ cc_library(
     sequence_kv_state.h
     sequences_group.h
     request_state.h
-    rec_type.h
     stopping_checker.h
     priority_comparator.h
   SRCS
@@ -59,7 +57,6 @@ cc_library(
     llm_request_factory.cpp
     structured_output_compiler.cpp
     vlm_request_factory.cpp
-    rec_request_factory.cpp
     dit_request.cpp
     request_output.cpp
     dit_request_output.cpp

@@ -90,11 +90,6 @@ DEFINE_double(prefill_layerwise_host_memory_gb,
 
 DEFINE_uint32(xxh3_128bits_seed, 1024, "Default XXH3 128-bits hash seed.");
 
-DEFINE_bool(
-    enable_xtensor,
-    false,
-    "Whether to enable xtensor for model weights with physical page pool.");
-
 DEFINE_int64(
     phy_page_granularity_size,
     2 * 1024 * 1024,
@@ -115,7 +110,6 @@ void KVCacheConfig::from_flags() {
   XLLM_CONFIG_ASSIGN_FROM_FLAG(prefill_layerwise_host_memory_gb);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(max_linear_state_cache_slots);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(xxh3_128bits_seed);
-  XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_xtensor);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(phy_page_granularity_size);
 }
 
@@ -131,7 +125,6 @@ void KVCacheConfig::from_json(const JsonReader& json) {
   XLLM_CONFIG_ASSIGN_FROM_JSON(prefill_layerwise_host_memory_gb);
   XLLM_CONFIG_ASSIGN_FROM_JSON(max_linear_state_cache_slots);
   XLLM_CONFIG_ASSIGN_FROM_JSON(xxh3_128bits_seed);
-  XLLM_CONFIG_ASSIGN_FROM_JSON(enable_xtensor);
   XLLM_CONFIG_ASSIGN_FROM_JSON(phy_page_granularity_size);
 }
 
@@ -160,8 +153,6 @@ void KVCacheConfig::append_config_json(
       config_json, default_config, max_linear_state_cache_slots);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, xxh3_128bits_seed);
-  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
-      config_json, default_config, enable_xtensor);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, phy_page_granularity_size);
 }

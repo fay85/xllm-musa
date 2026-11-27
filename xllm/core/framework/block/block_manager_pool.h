@@ -59,10 +59,9 @@ class BlockManagerPool : public KVCacheManager {
     // leaves in ConcurrentBlockManagerImpl so the async D2H offload callback
     // can free blocks off-thread safely.
     PROPERTY(bool, enable_host_offload) = false;
-    PROPERTY(bool, enable_xtensor) = false;
-    PROPERTY(int64_t, num_layers) = 0;  // Required when enable_xtensor is true
-    PROPERTY(int64_t, slot_size) = 0;   // Memory size per slot (for xtensor)
-    PROPERTY(std::string, model_id);    // Model ID for multi-model support
+    PROPERTY(int64_t, num_layers) = 0;
+    PROPERTY(int64_t, slot_size) = 0;
+    PROPERTY(std::string, model_id);  // Model ID for multi-model support
     PROPERTY(int64_t, server_idx) = 0;
     PROPERTY(bool, is_draft_engine) = false;
     // Token-level sliding window size for CompositeBlockManager.
@@ -144,10 +143,6 @@ class BlockManagerPool : public KVCacheManager {
   // get the options for the block manager
   const Options& options() const { return options_; }
 
-  // Reserve XTensor padding blocks for each DP manager.
-  // Should be called after KV tensors are created.
-  void reserve_xtensor_padding_blocks() override;
-
  protected:
   // Select the DP rank with the most effective headroom. Prefix-cache-only
   // blocks count as available because they can be evicted during allocation;
@@ -162,7 +157,6 @@ class BlockManagerPool : public KVCacheManager {
     // Non-owning: the pool keeps its fixed leaf topology alive through
     // teardown.
     const BlockManager* manager_ = nullptr;
-    bool use_used_blocks_ = false;
     std::list<std::string> labels_;
   };
 

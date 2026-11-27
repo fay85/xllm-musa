@@ -140,25 +140,6 @@ namespace xllm {
     LOG(FATAL) << __func__ << " is not implemented: " << msg; \
   } while (0)
 
-// Multi-model step lock/unlock macros for serializing step execution
-// Only locks when the condition is true.
-#define MULTI_MODEL_STEP_LOCK(condition)                \
-  static std::mutex __multi_model_step_mutex;           \
-  std::unique_lock<std::mutex> __multi_model_step_lock( \
-      __multi_model_step_mutex, std::defer_lock);       \
-  do {                                                  \
-    if (condition) {                                    \
-      __multi_model_step_lock.lock();                   \
-    }                                                   \
-  } while (0)
-
-#define MULTI_MODEL_STEP_UNLOCK()              \
-  do {                                         \
-    if (__multi_model_step_lock.owns_lock()) { \
-      __multi_model_step_lock.unlock();        \
-    }                                          \
-  } while (0)
-
 // Set ATB execute stream with stream guard
 #define SET_ATB_EXECUTE_STREAM(compute_stream, device, context)           \
   c10::StreamGuard __stream_guard = (compute_stream)->set_stream_guard(); \

@@ -1292,8 +1292,8 @@ bool MooncakeTransferEngine::move_memory_by_global_offsets(
     size_t transfer_size,
     MoveOpcode move_opcode) {
   if (src_offsets.size() != dst_offsets.size() || transfer_size == 0) {
-    LOG(ERROR) << "Invalid XTensor byte-region mapping, source="
-               << src_offsets.size() << ", destination=" << dst_offsets.size()
+    LOG(ERROR) << "Invalid byte-region mapping, source=" << src_offsets.size()
+               << ", destination=" << dst_offsets.size()
                << ", length=" << transfer_size;
     return false;
   }

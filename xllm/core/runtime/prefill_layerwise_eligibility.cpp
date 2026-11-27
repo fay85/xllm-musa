@@ -35,13 +35,12 @@ PrefillLayerwiseEligibility build_prefill_layerwise_eligibility(
   eligibility.torch_kernel_backend = options.npu_kernel_backend() == "TORCH";
   eligibility.llm_backend = options.backend() == "llm";
   eligibility.generate_task = options.task_type() == "generate";
-  eligibility.pd_prefill_only = is_pd_prefill_only(options);
+  eligibility.pd_prefill_only = is_pd_prefill_role(options);
   eligibility.push_transfer = options.kv_cache_transfer_mode() == "PUSH";
   eligibility.enable_prefill_piecewise_graph =
       options.enable_prefill_piecewise_graph();
   eligibility.is_draft_engine = options.is_draft_engine();
   eligibility.enable_sleep_mode = options.enable_sleep_mode();
-  eligibility.enable_xtensor = KVCacheConfig::get_instance().enable_xtensor();
   eligibility.enable_kvcache_store = options.enable_kvcache_store();
   eligibility.host_blocks_factor = options.host_blocks_factor();
   eligibility.cp_size = options.cp_size();

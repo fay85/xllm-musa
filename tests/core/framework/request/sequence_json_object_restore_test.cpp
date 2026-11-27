@@ -49,7 +49,6 @@ class SequenceJsonObjectRestoreTest : public ::testing::Test {
     params.logprobs = false;
     params.streaming = false;
     params.enable_schedule_overlap = false;
-    params.rec_type = RecType::kNone;
     params.bos_token_id = 0;
     params.request_id = "json_object_restore_test";
     params.sampling_param = &sampling_param_;

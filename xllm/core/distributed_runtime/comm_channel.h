@@ -26,7 +26,6 @@ limitations under the License.
 #include "common/types.h"
 #include "framework/kv_cache/kv_cache_shape.h"
 #include "framework/kv_cache_transfer/prefetch_result.h"
-#include "framework/xtensor/xtensor.h"
 #include "runtime/forward_params.h"
 #include "runtime/params_utils.h"
 #include "worker.pb.h"
@@ -59,9 +58,6 @@ class CommChannel {
                               const std::vector<uint16_t>& ports);
 
   // P2P link for weight transfer
-  virtual bool link_p2p(const std::string& remote_addr);
-  virtual bool unlink_p2p(const std::string& remote_addr);
-
   virtual bool init_model(const std::string& model_weights_path,
                           int32_t random_seed,
                           MasterStatus master_status);

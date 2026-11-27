@@ -1,11 +1,7 @@
 # Example gflags for xllm_test brpc C API server.
 # Start: xllm_test --flagfile=xllm/c_api/test/xllm_test.flags
 #
-# --- Backend: only one of llm (c_api/llm.h) or rec (c_api/rec.h) is loaded ---
---backend=rec
-# --backend=llm
-#
-# --- Required for xllm_*_initialize ---
+# --- Required for xllm_llm_initialize ---
 --model_path=/export/home/models/Qwen3-8B
 --devices=npu:4
 #
@@ -14,7 +10,6 @@
 # --listen_addr=0.0.0.0:8000
 # --idle_timeout_s=-1
 #
-# --- XLLM_InitOptions (override as needed; defaults match REC) ---
 # --enable_chunked_prefill=false
 # --transfer_listen_port=26000
 # --max_memory_utilization=0.55

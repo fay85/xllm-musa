@@ -27,7 +27,6 @@ limitations under the License.
 #include "core/framework/config/scheduler_config.h"
 #include "core/layers/common/attention_metadata.h"
 #include "core/layers/common/attention_metadata_builder.h"
-#include "core/util/rec_model_utils.h"
 #include "core/util/utils.h"
 #include "kernels/dcu/attention_runner.h"
 #include "kernels/dcu/global_capture_instance.h"
@@ -101,11 +100,7 @@ DcuGraphPersistentParam::DcuGraphPersistentParam(
   const int64_t max_tokens_per_batch =
       SchedulerConfig::get_instance().max_tokens_per_batch();
 
-  int64_t max_seqs_per_batch = options.max_seqs_per_batch();
-  if (is_rec_multi_round_mode()) {
-    max_seqs_per_batch *= options.beam_width();
-  }
-
+  const int64_t max_seqs_per_batch = options.max_seqs_per_batch();
   const int64_t max_seq_len = args.max_position_embeddings();
   const uint32_t block_size = options.block_size();
   const int64_t max_num_blocks_per_req =
@@ -1036,13 +1031,6 @@ ModelOutput DcuGraphExecutorImpl::run(const torch::Tensor& tokens,
   }
 
   if (!graph_mode || is_prefill) {
-    COUNTER_INC(num_model_execution_total_eager);
-    return model_->forward(tokens, positions, kv_caches, params);
-  }
-
-  if (params.has_llmrec_params()) {
-    VLOG(1) << "DCU graph does not support LLMRec/xAttention yet; "
-            << "falling back to eager.";
     COUNTER_INC(num_model_execution_total_eager);
     return model_->forward(tokens, positions, kv_caches, params);
   }

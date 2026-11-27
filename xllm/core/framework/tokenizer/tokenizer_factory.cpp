@@ -38,11 +38,6 @@ std::unique_ptr<Tokenizer> TokenizerFactory::create_tokenizer(
     LOG(INFO) << "Create Tiktoken tokenizer.";
     tokenizer =
         std::make_unique<TiktokenTokenizer>(model_weights_path, tokenizer_args);
-  } else if (tokenizer_args.tokenizer_type() == "rec") {
-    // 3. create rec tokenizer
-    LOG(INFO) << "Create rec tokenizer.";
-    tokenizer =
-        std::make_unique<RecTokenizer>(model_weights_path, tokenizer_args);
   } else {
     // 4. create sentencepiece tokenizer
     LOG(INFO) << "Create SentencePiece tokenizer.";

@@ -215,23 +215,6 @@ torch::Tensor fp8_scaled_matmul(
     const std::optional<torch::Tensor>& bias = std::nullopt,
     const std::optional<torch::Tensor>& output = std::nullopt);
 
-std::pair<torch::Tensor, torch::Tensor> compute_topk_for_beam_search(
-    torch::Tensor combined_probs,
-    uint32_t batch_size,
-    uint32_t beam_size,
-    uint32_t top_k,
-    torch::Device device);
-
-std::pair<torch::Tensor, torch::Tensor> compute_topk_general(
-    torch::Tensor input,
-    uint32_t batch_size,
-    uint32_t input_length,
-    uint32_t k,
-    torch::Device device);
-
-torch::Tensor air_log_softmax_last_dim(const torch::Tensor& input,
-                                       const torch::Tensor& temperatures);
-
 void fused_qk_norm_rope(
     torch::Tensor& qkv,   // Combined QKV tensor [num_tokens,
                           // (num_heads_q+num_heads_k+num_heads_v)*head_dim]

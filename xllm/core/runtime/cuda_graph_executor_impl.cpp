@@ -30,17 +30,14 @@ limitations under the License.
 #include "core/common/global_flags.h"
 #include "core/common/metrics.h"
 #include "core/framework/config/execution_config.h"
-#include "core/framework/config/rec_config.h"
 #include "core/layers/common/attention_metadata.h"
 #include "core/layers/common/attention_metadata_builder.h"
 #include "core/layers/cuda/flashinfer_planinfo.h"
-#include "core/layers/cuda/xattention_planinfo.h"
 #include "core/platform/cuda/device_capture_lock.h"
 #include "core/platform/device.h"
 #include "core/platform/shared_vmm_allocator.h"
 #include "core/platform/stream.h"
 #include "core/platform/vmm_torch_allocator.h"
-#include "core/util/rec_model_utils.h"
 #include "core/util/utils.h"
 #include "kernels/cuda/global_capture_instance.h"
 #include "kernels/cuda/utils.h"
@@ -137,18 +134,8 @@ CudaGraphPersistentParam::CudaGraphPersistentParam(
   const int64_t max_tokens_per_batch = options.max_tokens_per_batch();
   // Round the sequence capacity to the same bucket used by graph execution so
   // the largest configured decode batch can be padded safely.
-  int64_t max_seqs_per_batch;
-  if (is_rec_multi_round_mode()) {
-    // max_seqs_per_batch is the max sequence count per Batch in a scheduler
-    // group.
-    // When is_rec_multi_round_mode() == true, multiply by beam_width to account
-    // for beam search.
-    max_seqs_per_batch = options.max_seqs_per_batch() * options_.beam_width();
-  } else {
-    max_seqs_per_batch = options.max_seqs_per_batch();
-  }
-  max_seqs_per_batch =
-      get_graph_bucket_num_tokens(max_seqs_per_batch, /*is_prefill=*/false);
+  const int64_t max_seqs_per_batch = get_graph_bucket_num_tokens(
+      options.max_seqs_per_batch(), /*is_prefill=*/false);
   auto tensor_options = torch::TensorOptions().device(device);
 
   const int64_t max_seq_len = args_.max_position_embeddings();
@@ -223,7 +210,6 @@ bool CudaGraphPersistentParam::can_use_llm_decode_fast_path(
     const torch::Tensor& positions,
     const ModelInputParams& params) const {
   if (!params.meta.batch_forward_type.is_decode() ||
-      is_rec_multi_round_mode() || params.has_llmrec_params() ||
       params.embedding.input_embedding.defined()) {
     return false;
   }
@@ -427,7 +413,7 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
     }
   }
 
-  if (!is_rec_multi_round_mode() && !use_llm_decode_fast_path) {
+  if (!use_llm_decode_fast_path) {
     // q_seq_lens is q_cu_seq_lens in GPU Model.
     // kv_seq_lens is kv_cu_seq_lens in GPU Model.
     VLOG(kGraphExecutorLogVerboseLevel)
@@ -480,8 +466,7 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
         persistent_new_cache_slots(slot_mapping_tokens);
   }
 
-  if (!is_rec_multi_round_mode() &&
-      !params.embedding.linear_state_ids.empty()) {
+  if (!params.embedding.linear_state_ids.empty()) {
     if (params.embedding.linear_state_indices.defined()) {
       persistent_linear_state_indices_
           .slice(/*dim=*/0, /*start=*/0, /*end=*/actual_batch_size)
@@ -495,12 +480,8 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
     }
   }
 
-  // Copy block table data. In rec multi-round, block_tables may already be
-  // expanded to batch_size * beam_width rows while num_sequences still tracks
-  // the logical request count. Use the tensor's real row count here.
-  const int64_t actual_block_table_batch =
-      is_rec_multi_round_mode() ? params.attention.device.block_tables.size(0)
-                                : actual_batch_size;
+  // Copy block table data.
+  const int64_t actual_block_table_batch = actual_batch_size;
   const int64_t actual_block_table_len =
       params.attention.device.block_tables.size(1);
   torch::Tensor slice_persistent_block_tables =
@@ -543,11 +524,6 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
         .copy_(embedding, /*non_blocking=*/true);
   }
 
-  const bool is_decode_with_llmrec =
-      params.meta.batch_forward_type.is_decode() && params.has_llmrec_params();
-  const bool use_two_stage_decode =
-      !::xllm::RecConfig::get_instance().enable_xattention_one_stage() &&
-      is_decode_with_llmrec;
   const int32_t head_dim = args_.head_dim();
   const int64_t tp_size =
       options_.world_size() / std::max(options_.dp_size(), 1);
@@ -578,146 +554,6 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
 
   bool use_tensor_core =
       xllm::kernel::cuda::should_use_tensor_core(dtype, n_heads, n_kv_heads);
-  if (use_two_stage_decode) {
-    if (params.attention.device.q_seq_lens.defined() &&
-        params.attention.device.q_seq_lens.numel() > 0) {
-      const int64_t q_numel = params.attention.device.q_seq_lens.numel();
-      q_seq_lens_.slice(/*dim=*/0, /*start=*/0, /*end=*/q_numel)
-          .copy_(params.attention.device.q_seq_lens, /*non_blocking=*/true);
-      attn_metadata->q_cu_seq_lens = q_seq_lens(/*actual_batch_size=*/q_numel);
-    }
-
-    if (params.attention.device.kv_seq_lens.defined() &&
-        params.attention.device.kv_seq_lens.numel() > 0) {
-      const int64_t kv_numel = params.attention.device.kv_seq_lens.numel();
-      kv_seq_lens_.slice(/*dim=*/0, /*start=*/0, /*end=*/kv_numel)
-          .copy_(params.attention.device.kv_seq_lens, /*non_blocking=*/true);
-      attn_metadata->kv_cu_seq_lens =
-          kv_seq_lens(/*actual_batch_size=*/kv_numel);
-      if (kv_numel > 1) {
-        attn_metadata->kv_seq_lens = torch::diff(attn_metadata->kv_cu_seq_lens);
-      }
-    }
-
-    attn_metadata->paged_kv_indptr = torch::Tensor();
-    attn_metadata->paged_kv_indices = torch::Tensor();
-    attn_metadata->paged_kv_last_page_len = torch::Tensor();
-    attn_metadata->qo_indptr = torch::Tensor();
-
-    // Update plan_info if attn_metadata exists and enable_cuda_graph is true.
-    const auto& llmrec_params = *params.llmrec_params();
-    auto cache = attn_metadata->xattention_two_stage_decode_cache.value();
-    CHECK(cache.q_cu_seq_lens_shared.defined())
-        << "q_cu_seq_lens_shared must be initialized in rec worker";
-    CHECK(cache.qo_indptr_expanded.defined())
-        << "qo_indptr_expanded must be initialized in rec worker";
-    CHECK(cache.paged_kv_indptr_expanded.defined() &&
-          cache.paged_kv_indices_expanded.defined() &&
-          cache.paged_kv_last_page_len_expanded.defined())
-        << "paged_kv_* expanded tensors must be initialized in rec worker";
-    CHECK(cache.shared_lse.defined() && cache.shared_o.defined() &&
-          cache.unshared_lse.defined() && cache.unshared_o.defined())
-        << "two-stage shared/unshared output cache tensors must be "
-           "initialized in rec worker";
-
-    const int64_t request_batch_size =
-        cache.q_cu_seq_lens_shared.numel() > 0
-            ? (cache.q_cu_seq_lens_shared.numel() - 1)
-            : 0;
-    CHECK_GT(request_batch_size, 0)
-        << "request_batch_size must be > 0 for two-stage xattention";
-    const int64_t beam_width = std::max<int64_t>(llmrec_params.beam_width, 1);
-    const int64_t total_beam = request_batch_size * beam_width;
-
-    CHECK_EQ(cache.shared_o.size(0), total_beam)
-        << "shared_o first dim mismatch: expected total_beam=" << total_beam
-        << ", got " << cache.shared_o.size(0);
-    CHECK_EQ(cache.unshared_o.size(0), total_beam)
-        << "unshared_o first dim mismatch: expected total_beam=" << total_beam
-        << ", got " << cache.unshared_o.size(0);
-    CHECK_EQ(cache.qo_indptr_expanded.numel(), total_beam + 1)
-        << "qo_indptr_expanded size mismatch: expected " << (total_beam + 1)
-        << ", got " << cache.qo_indptr_expanded.numel();
-    CHECK_EQ(cache.paged_kv_indptr_expanded.numel(), total_beam + 1)
-        << "paged_kv_indptr_expanded size mismatch";
-    CHECK_EQ(cache.paged_kv_indices_expanded.numel(), total_beam)
-        << "paged_kv_indices_expanded size mismatch";
-    CHECK_EQ(cache.paged_kv_last_page_len_expanded.numel(), total_beam)
-        << "paged_kv_last_page_len_expanded size mismatch";
-
-    const int64_t max_decode_step =
-        !llmrec_params.unshared_k_caches.empty()
-            ? llmrec_params.unshared_k_caches[0].size(2)
-            : std::max<int64_t>(
-                  ::xllm::RecConfig::get_instance().max_decode_rounds() - 1, 1);
-    CHECK_GT(max_decode_step, 0)
-        << "max_decode_step must be > 0 for two-stage decode";
-
-    cache.cached_batch_size = static_cast<int32_t>(request_batch_size);
-    cache.cached_beam_size = static_cast<int32_t>(beam_width);
-    cache.cached_num_heads = static_cast<int32_t>(n_heads);
-    cache.cached_head_size = static_cast<int32_t>(head_dim);
-    cache.cached_max_decode_step = static_cast<int32_t>(max_decode_step);
-    cache.cached_step = (llmrec_params.current_round_tensor.defined() &&
-                         llmrec_params.current_round_tensor.numel() > 0)
-                            ? llmrec_params.current_round_tensor.item<int32_t>()
-                            : 0;
-
-    attn_metadata->xattention_two_stage_decode_cache = cache;
-
-    layer::AttentionMetadata shared_attn_meta = *attn_metadata;
-    shared_attn_meta.plan_info = attn_metadata->shared_plan_info;
-    shared_attn_meta.q_cu_seq_lens = cache.q_cu_seq_lens_shared;
-    shared_attn_meta.is_causal = false;
-
-    attn_metadata->shared_plan_info->layer_id = 0;
-    layer::xattention::update_xattention_plan_info(
-        attn_metadata->shared_plan_info,
-        backend,
-        shared_attn_meta,
-        dtype,
-        dtype,
-        dtype,
-        head_dim,
-        head_dim,
-        static_cast<int32_t>(n_heads),
-        static_cast<int32_t>(n_kv_heads),
-        /*block_size=*/1,
-        /*window_size_left=*/-1,
-        /*enable_cuda_graph=*/true,
-        /*causal=*/false,
-        /*use_tensor_core=*/true,
-        /*is_shared_stage_plan*/ true);
-
-    layer::AttentionMetadata unshared_attn_meta = *attn_metadata;
-    unshared_attn_meta.plan_info = attn_metadata->unshared_plan_info;
-    unshared_attn_meta.qo_indptr = cache.qo_indptr_expanded;
-    unshared_attn_meta.paged_kv_indptr = cache.paged_kv_indptr_expanded;
-    unshared_attn_meta.paged_kv_indices = cache.paged_kv_indices_expanded;
-    unshared_attn_meta.paged_kv_last_page_len =
-        cache.paged_kv_last_page_len_expanded;
-    unshared_attn_meta.is_causal = false;
-
-    attn_metadata->unshared_plan_info->layer_id = 0;
-    layer::xattention::update_xattention_plan_info(
-        attn_metadata->unshared_plan_info,
-        backend,
-        unshared_attn_meta,
-        dtype,
-        dtype,
-        dtype,
-        head_dim,
-        head_dim,
-        static_cast<int32_t>(n_heads),
-        static_cast<int32_t>(n_kv_heads),
-        static_cast<int32_t>(max_decode_step),
-        sliding_window,
-        /*enable_cuda_graph=*/true,
-        /*causal=*/false,
-        use_tensor_core,
-        /*is_shared_stage_plan*/ false);
-    return build_capture_params_if_needed();
-  }
   if (use_llm_decode_fast_path) {
     const uint32_t slot_mapping_tokens =
         padded_num_tokens > 0 ? padded_num_tokens : actual_num_tokens;

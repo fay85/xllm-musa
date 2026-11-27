@@ -56,11 +56,3 @@ On MLU, GLM-5.3-Flash uses `glm5_next` and currently supports text generation; i
 | Flux |   ✅   |   ✅   |   ❌   |   ❌   |
 
 MLU integrates Flux, Flux Control, and Flux Fill under `flux`, `flux_control`, and `fluxfill`, respectively. This does not include Flux2.
-
-## Rec
-|     |  NPU  |  MLU  |  ILU  | Hygon DCU |
-| --- | :---: | :---: | :---: | :---: |
-| OneRec  |   ✅   |   ❌   |   ❌   |   ❌   |
-| Qwen2   |   ✅   |   ❌   |   ❌   |   ❌   |
-| Qwen2.5 |   ✅   |   ❌   |   ❌   |   ❌   |
-| Qwen3   |   ✅   |   ❌   |   ❌   |   ❌   |

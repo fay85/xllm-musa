@@ -88,7 +88,6 @@ LLMMaster::LLMMaster(const Options& options)
       .dp_size(options_.dp_size())
       .cp_size(options_.cp_size())
       .enable_disagg_pd(options_.enable_disagg_pd())
-      .enable_pd_ooc(options_.enable_pd_ooc())
       .enable_schedule_overlap(options_.enable_schedule_overlap())
       .enable_chunked_prefill(options_.enable_chunked_prefill())
       .instance_name(options_.instance_name())
@@ -107,8 +106,7 @@ LLMMaster::LLMMaster(const Options& options)
       .enable_forward_interruption(options_.enable_forward_interruption())
       .max_global_ttft_ms(options_.max_global_ttft_ms())
       .max_global_tpot_ms(options_.max_global_tpot_ms())
-      .server_idx(options_.server_idx())
-      .rec_worker_max_concurrency(options_.rec_worker_max_concurrency());
+      .server_idx(options_.server_idx());
   scheduler_ = create_continuous_scheduler(engine_.get(), scheduler_options);
 
   if (options_.enable_service_routing()) {
@@ -427,14 +425,6 @@ bool LLMMaster::load_lora_broadcast(const std::string& lora_name,
 
 bool LLMMaster::unload_lora_broadcast(const std::string& lora_name) {
   return engine_->unload_lora_broadcast(lora_name);
-}
-
-bool LLMMaster::link_p2p(const std::vector<std::string>& remote_addrs) {
-  return engine_->link_p2p(remote_addrs);
-}
-
-bool LLMMaster::unlink_p2p(const std::vector<std::string>& remote_addrs) {
-  return engine_->unlink_p2p(remote_addrs);
 }
 
 // ============== Async RL training support: Pause/Resume ==============

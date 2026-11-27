@@ -219,7 +219,6 @@ message XLLM_DumpRecord {
 }
 
 // brpc service: dispatch by XLLM_Request.call_function (must match xllm_test
-// --backend: rec -> xllm_rec_*; llm -> xllm_llm_*).
-service XllmRecCapiService {
+service XllmCapiService {
   rpc Inference(XLLM_Request) returns (XLLM_Response);
 }

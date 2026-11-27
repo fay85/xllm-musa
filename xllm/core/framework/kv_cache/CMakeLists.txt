@@ -86,7 +86,6 @@ cc_library(
     :deepseek_v4_cache_policy
     :kv_cache_estimation
     :platform
-    :xtensor
     glog::glog
     torch
     $<$<BOOL:${USE_MLU}>:cndrv>

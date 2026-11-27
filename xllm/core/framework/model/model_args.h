@@ -155,8 +155,6 @@ struct ModelArgs {
   // deepseek v2/v3 MoE
   PROPERTY(bool, use_moe) = false;
   PROPERTY(std::string, moe_score_func);
-  PROPERTY(float, moe_route_scale) = 1.0f;
-  PROPERTY(bool, moe_use_shared_experts) = false;
   PROPERTY(std::string, topk_method);
   PROPERTY(int32_t, n_routed_experts) = 0;
   PROPERTY(int32_t, n_shared_experts) = 0;

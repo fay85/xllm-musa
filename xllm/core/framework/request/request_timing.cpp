@@ -289,8 +289,8 @@ void RequestTiming::restore_pd(const RequestTimingSnapshot& upstream) {
   pd_needs_scheduling_.store(true, std::memory_order_release);
   upstream_queue_ = upstream.queued_time;
   upstream_prefill_ = upstream.prefill_time;
-  // OOC can return to this node. Don't append its old generation timestamps to
-  // the new local role's span, or turn a handoff gap into a complete duration.
+  // Don't include generation timestamps from before the handoff in the new
+  // local span.
   last_token_ts_.reset();
   generation_events_complete_ = true;
   set_timestamp_locked(first_token_ts_, generated_, std::nullopt);

@@ -640,15 +640,6 @@ TEST(NpuCpCapabilityTest, PythonGlm5NextCapabilityGate) {
             std::optional<std::string>(
                 "Python GLM-5 Next CP with disaggregated PD requires the "
                 "PREFILL role"));
-  options.instance_role(InstanceRole::PREFILL)
-      .enable_disagg_pd(false)
-      .enable_pd_ooc(true);
-  EXPECT_EQ(validate_model_cp(options,
-                              EngineType::LLM,
-                              "glm5_next",
-                              /*global_world_size=*/8),
-            std::optional<std::string>(
-                "Python GLM-5 Next CP initially requires enable_pd_ooc=false"));
 }
 
 TEST(NpuCpCapabilityTest, PythonGlm5NextShardedKvIsAdmittedAtCpSizeOne) {

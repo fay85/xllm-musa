@@ -639,10 +639,6 @@ void KVCacheTransfer::merge_kv_blocks(
         append_unique_request_id(
             seen_request_ids, key, kv_info.request_ids, info.request_id);
 
-        // XTensor mode: copy destination offsets
-        if (!info.dst_xtensor_layer_offsets.empty()) {
-          kv_info.dst_xtensor_layer_offsets = info.dst_xtensor_layer_offsets;
-        }
         merged_kv_infos[key] = std::move(kv_info);
       } else {
         append_mappings(merged_kv_infos[key].mappings, info.mappings);
@@ -650,30 +646,6 @@ void KVCacheTransfer::merge_kv_blocks(
                                  key,
                                  merged_kv_infos[key].request_ids,
                                  info.request_id);
-
-        // XTensor mode: merge destination offsets (append to each layer)
-        if (!info.dst_xtensor_layer_offsets.empty()) {
-          auto& existing = merged_kv_infos[key].dst_xtensor_layer_offsets;
-          // Initialize if not already done
-          if (existing.empty()) {
-            existing = info.dst_xtensor_layer_offsets;
-          } else {
-            // Append offsets for each layer
-            for (size_t layer = 0;
-                 layer < info.dst_xtensor_layer_offsets.size() &&
-                 layer < existing.size();
-                 ++layer) {
-              existing[layer].k_offsets.insert(
-                  existing[layer].k_offsets.end(),
-                  info.dst_xtensor_layer_offsets[layer].k_offsets.begin(),
-                  info.dst_xtensor_layer_offsets[layer].k_offsets.end());
-              existing[layer].v_offsets.insert(
-                  existing[layer].v_offsets.end(),
-                  info.dst_xtensor_layer_offsets[layer].v_offsets.begin(),
-                  info.dst_xtensor_layer_offsets[layer].v_offsets.end());
-            }
-          }
-        }
       }
     }
   }
@@ -691,26 +663,8 @@ std::shared_ptr<KVCacheTransfer> KVCacheTransferFactory::create(
 #if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU) || \
     defined(USE_MUSA)
   LOG(INFO) << "Create Mooncake KVCacheTransfer.";
-  std::shared_ptr<MooncakeKVCacheTransferBase> mooncake_transfer;
-#if defined(USE_NPU)
-  if (::xllm::KVCacheConfig::get_instance().enable_xtensor()) {
-    auto xtensor_transfer = std::make_shared<MooncakeKVCacheTransferXTensor>(
-        device_id, transfer_listen_port, device);
-    if (!model_id.empty()) {
-      xtensor_transfer->set_model_id(model_id);
-      LOG(INFO) << "XTensor mode enabled for MooncakeKVCacheTransfer, model_id="
-                << model_id;
-    }
-    mooncake_transfer = xtensor_transfer;
-  } else {
-    mooncake_transfer = std::make_shared<MooncakeKVCacheTransferDefault>(
-        device_id, transfer_listen_port, device, model_type);
-  }
-#else
-  mooncake_transfer = std::make_shared<MooncakeKVCacheTransferDefault>(
+  transfer = std::make_shared<MooncakeKVCacheTransferDefault>(
       device_id, transfer_listen_port, device, model_type);
-#endif
-  transfer = mooncake_transfer;
 #endif
 
   return transfer;

@@ -28,8 +28,6 @@ namespace xllm {
 
 class VLMMaster;
 
-class RecMaster;
-
 using ChatCall = StreamCall<proto::ChatRequest, proto::ChatResponse>;
 
 // a class to handle completion requests
@@ -37,9 +35,6 @@ class ChatServiceImpl final : public APIServiceImpl<ChatCall> {
  public:
   // Constructor for LLM backend
   ChatServiceImpl(LLMMaster* master, const std::vector<std::string>& models);
-
-  // Constructor for Rec backend (LlmRec only, e.g., Qwen3)
-  ChatServiceImpl(RecMaster* master, const std::vector<std::string>& models);
 
   // brpc call_data needs to use shared_ptr
   void process_async_impl(std::shared_ptr<ChatCall> call);
@@ -49,13 +44,11 @@ class ChatServiceImpl final : public APIServiceImpl<ChatCall> {
   void add_model_master(const std::string& model, LLMMaster* master);
 
  private:
-  void process_rec_chat_request(std::shared_ptr<ChatCall> call);
   LLMMaster* get_model_master(const std::string& model) const;
 
   DISALLOW_COPY_AND_ASSIGN(ChatServiceImpl);
 
   LLMMaster* master_ = nullptr;
-  RecMaster* rec_master_ = nullptr;
   mutable std::shared_mutex llm_model_to_master_mutex_;
   std::unordered_map<std::string, LLMMaster*> llm_model_to_master_;
   const std::string tool_call_parser_format_;

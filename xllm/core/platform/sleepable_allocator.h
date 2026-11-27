@@ -46,9 +46,8 @@ const char* to_string(MemTag tag);
 // wakeup (weights re-loaded, KV re-prefilled).
 //
 // Physical memory is mapped in large chunks (chunk_bytes, GiB-scale) instead of
-// fixed 2MB pages, so map/unmap issue only a handful of driver calls. Unlike
-// xtensor's PhyPagePool, sleep actually returns the physical memory to the
-// driver (aclrtFreePhysical).
+// fixed 2MB pages, so map/unmap issue only a handful of driver calls. Sleep
+// returns the physical memory to the driver (aclrtFreePhysical).
 class SleepableRegion final {
  public:
   SleepableRegion(MemTag tag,

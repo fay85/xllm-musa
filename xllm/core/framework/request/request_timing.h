@@ -77,7 +77,7 @@ RequestTimingSample request_pd_tpot_sample(
 
 // Shared API/Request/Sequence timing on one steady clock. Generation terminal
 // is immutable; first-token observation can follow successful completion.
-// PD imports durations, never timestamps; OOC return starts a new local span.
+// PD imports durations, never timestamps, and starts a new local span.
 class RequestTiming final {
  public:
   using Clock = std::chrono::steady_clock;

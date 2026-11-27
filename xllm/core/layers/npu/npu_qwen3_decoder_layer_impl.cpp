@@ -31,7 +31,6 @@ limitations under the License.
 #include "operations/aclnn/ops/quant_matmul_nz_decode_operation.h"
 #include "operations/aclnn/utils/utils.h"
 #include "operations/fusion/mlp/mlp.h"
-#include "util/rec_model_utils.h"
 
 // #include "attn_mask.h"
 #include "torch_npu/csrc/core/npu/NPUCachingAllocator.h"
@@ -87,7 +86,6 @@ void NpuQwen3DecoderLayerImpl::param_from_args(
       ::xllm::SchedulerConfig::get_instance().enable_chunked_prefill() &&
       isPrefill;
   param.loraEnableGMM = false;
-  param.enableXattention = is_rec_multi_round_mode();
   const auto& kernel_config = ::xllm::KernelConfig::get_instance();
 
   param.linearTransposeType = {static_cast<int>(TransposeType::NOT_TRANSPOSE),
@@ -467,41 +465,13 @@ void NpuQwen3DecoderLayerImpl::build_node_variant_pack(
           input_params.attention.device.block_tables);
 
   int input_idx = WEIGHT_COUNT_PER_LAYER + 11;
-  if (is_rec_multi_round_mode()) {
-    const auto* llmrec = input_params.llmrec_params();
-
-    if (is_prefill) {
-      node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 4) =
-          atb_speed::Utils::AtTensor2Tensor(kv_cache.get_k_cache());
-      node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 5) =
-          atb_speed::Utils::AtTensor2Tensor(kv_cache.get_v_cache());
-    } else {
-      CHECK_LT(static_cast<size_t>(node_id), llmrec->unshared_k_caches.size());
-      CHECK_LT(static_cast<size_t>(node_id), llmrec->unshared_v_caches.size());
-      node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 4) =
-          atb_speed::Utils::AtTensor2Tensor(llmrec->unshared_k_caches[node_id]);
-      node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 5) =
-          atb_speed::Utils::AtTensor2Tensor(llmrec->unshared_v_caches[node_id]);
-    }
-    node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 10) = placeholder_;
-    node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 11) =
-        atb_speed::Utils::AtTensor2Tensor(llmrec->shared_k_caches[node_id]);
-    node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 12) =
-        atb_speed::Utils::AtTensor2Tensor(llmrec->shared_v_caches[node_id]);
-    node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 13) =
-        atb_speed::Utils::AtTensor2Tensor(llmrec->beam_width_tensor);
-    node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 14) =
-        atb_speed::Utils::AtTensor2Tensor(llmrec->current_round_tensor);
-    input_idx = WEIGHT_COUNT_PER_LAYER + 15;
-  } else {
-    node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 4) =
-        atb_speed::Utils::AtTensor2Tensor(kv_cache.get_k_cache());
-    node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 5) =
-        atb_speed::Utils::AtTensor2Tensor(kv_cache.get_v_cache());
-    node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 10) =
-        atb_speed::Utils::AtTensor2Tensor(
-            input_params.attention.device.new_cache_slots);
-  }
+  node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 4) =
+      atb_speed::Utils::AtTensor2Tensor(kv_cache.get_k_cache());
+  node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 5) =
+      atb_speed::Utils::AtTensor2Tensor(kv_cache.get_v_cache());
+  node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 10) =
+      atb_speed::Utils::AtTensor2Tensor(
+          input_params.attention.device.new_cache_slots);
 
   if (is_prefill &&
       (::xllm::SchedulerConfig::get_instance().enable_chunked_prefill() ||

@@ -209,7 +209,7 @@ class StreamCall : public Call {
   //
   // `empty_array_field` materializes one omitted-or-empty repeated field as
   // an empty JSON array. jsonify_empty_array stays off so unrelated empty
-  // fields (for example CompletionResponse.output_tensors) are not exposed.
+  // fields are not exposed.
   bool write(const google::protobuf::Message& message,
              std::string_view empty_array_field = {}) {
     if (stream_finished_) {

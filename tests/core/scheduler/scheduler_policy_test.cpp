@@ -2732,7 +2732,6 @@ TEST(SchedulerPolicyTest, PendingDecodeReleaseStopsFurtherPreemption) {
       /*max_tokens_per_chunk_for_prefill=*/16384,
       /*dp_size=*/1);
   options.enable_disagg_pd() = true;
-  options.enable_pd_ooc() = false;
   options.instance_role() = InstanceRole::DECODE;
   options.enable_schedule_overlap() = false;
   BatchMode mode{
@@ -2855,7 +2854,6 @@ TEST(SchedulerPolicyTest, RetriesBlockedDecodeBeforeRestoringVictim) {
       /*max_tokens_per_chunk_for_prefill=*/16384,
       /*dp_size=*/1);
   options.enable_disagg_pd() = true;
-  options.enable_pd_ooc() = false;
   options.instance_role() = InstanceRole::DECODE;
   options.enable_schedule_overlap() = false;
   BatchMode mode{
@@ -2960,7 +2958,6 @@ TEST(SchedulerPolicyTest,
       /*max_tokens_per_chunk_for_prefill=*/16384,
       /*dp_size=*/1);
   options.enable_disagg_pd() = true;
-  options.enable_pd_ooc() = false;
   options.instance_role() = InstanceRole::DECODE;
   options.enable_schedule_overlap() = false;
   BatchMode mode{
@@ -3498,7 +3495,6 @@ ContinuousScheduler::Options make_restore_options(int32_t token_budget,
                                token_budget,
                                dp_size);
   options.enable_disagg_pd() = true;
-  options.enable_pd_ooc() = false;
   options.instance_role() = InstanceRole::DECODE;
   options.enable_schedule_overlap() = false;
   return options;

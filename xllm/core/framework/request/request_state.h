@@ -32,7 +32,6 @@ limitations under the License.
 #include "core/framework/sampling/json_object_grammar.h"
 #include "core/framework/sampling/sampling_params.h"
 #include "core/framework/sampling/xgrammar_constraint.h"
-#include "rec_type.h"
 #include "request_output.h"
 #include "sample_slot.h"
 #include "stopping_checker.h"
@@ -197,8 +196,6 @@ class RequestState final {
   bool enable_schedule_overlap = false;
 
   bool is_graph_warmup = false;
-
-  RecType rec_type = RecType::kNone;
 
   int32_t bos_token_id = 0;
 

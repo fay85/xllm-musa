@@ -25,19 +25,12 @@ namespace xllm {
 class KVCacheTransfer;
 
 #if defined(USE_NPU)
-class MooncakeWeightTransfer;
 #endif
 
 class WorkerRendezvous final {
  public:
-#if defined(USE_NPU)
-  WorkerRendezvous(
-      const std::shared_ptr<KVCacheTransfer>& kv_cache_transfer,
-      const std::unique_ptr<MooncakeWeightTransfer>& weight_transfer);
-#else
   explicit WorkerRendezvous(
       const std::shared_ptr<KVCacheTransfer>& kv_cache_transfer);
-#endif
 
   bool link_cluster(const std::vector<uint64_t>& cluster_ids,
                     const std::vector<std::string>& addrs,
@@ -47,19 +40,12 @@ class WorkerRendezvous final {
                       const std::vector<std::string>& addrs,
                       const std::vector<uint16_t>& ports);
 
-  bool link_p2p(const std::string& remote_addr);
-  bool unlink_p2p(const std::string& remote_addr);
-
  private:
   bool validate_cluster_endpoints(const std::vector<uint64_t>& cluster_ids,
                                   const std::vector<std::string>& addrs,
                                   const std::vector<uint16_t>& ports) const;
 
   const std::shared_ptr<KVCacheTransfer>& kv_cache_transfer_;
-
-#if defined(USE_NPU)
-  const std::unique_ptr<MooncakeWeightTransfer>& weight_transfer_;
-#endif
 };
 
 }  // namespace xllm

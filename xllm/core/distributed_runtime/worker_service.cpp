@@ -700,30 +700,6 @@ void WorkerService::UnlinkCluster(::google::protobuf::RpcController* controller,
   return;
 }
 
-void WorkerService::LinkP2P(::google::protobuf::RpcController* controller,
-                            const proto::P2PLinkWorkerRequest* req,
-                            proto::Status* resp,
-                            ::google::protobuf::Closure* done) {
-  threadpool_->schedule([this, controller, req, resp, done]() mutable {
-    brpc::ClosureGuard done_guard(done);
-    bool status = worker_->link_p2p(req->remote_addr());
-    resp->set_ok(status);
-  });
-  return;
-}
-
-void WorkerService::UnlinkP2P(::google::protobuf::RpcController* controller,
-                              const proto::P2PLinkWorkerRequest* req,
-                              proto::Status* resp,
-                              ::google::protobuf::Closure* done) {
-  threadpool_->schedule([this, controller, req, resp, done]() mutable {
-    brpc::ClosureGuard done_guard(done);
-    bool status = worker_->unlink_p2p(req->remote_addr());
-    resp->set_ok(status);
-  });
-  return;
-}
-
 void WorkerService::UpdateWeights(::google::protobuf::RpcController* controller,
                                   const proto::UpdateWeightsRequest* req,
                                   proto::Status* resp,
@@ -789,17 +765,7 @@ void WorkerService::Wakeup(::google::protobuf::RpcController* controller,
     brpc::ClosureGuard done_guard(done);
     WakeupOptions options;
     options.master_status = MasterStatus(req->master_status());
-    options.remote_addrs.assign(req->remote_addrs().begin(),
-                                req->remote_addrs().end());
     // Unmarshal weight segments
-    for (const auto& seg_list : req->src_weight_segments()) {
-      std::vector<WeightSegment> segments;
-      segments.reserve(seg_list.segments_size());
-      for (const auto& proto_seg : seg_list.segments()) {
-        segments.emplace_back(proto_seg.offset(), proto_seg.size());
-      }
-      options.src_weight_segments.push_back(std::move(segments));
-    }
     bool status = worker_->wakeup(options);
     resp->set_ok(status);
   });

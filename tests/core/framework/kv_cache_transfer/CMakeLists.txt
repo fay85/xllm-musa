@@ -101,9 +101,8 @@ cc_test(
     GTest::gtest_main
 )
 
-# Resolve static link order between xtensor and xllm_server for this test target.
 target_link_libraries(mooncake_transfer_engine_test PRIVATE
-  "$<LINK_GROUP:RESCAN,xtensor,xllm_server>")
+  "$<LINK_GROUP:RESCAN,xllm_server>")
 
 # These cases initialize local Mooncake RPC endpoints from a shared port
 # range. Serialize only endpoint users; pure layout/service tests stay parallel.
@@ -143,7 +142,7 @@ cc_test(
 )
 
 target_link_libraries(kv_split_width_mismatch_test PRIVATE
-  "$<LINK_GROUP:RESCAN,xtensor,xllm_server>")
+  "$<LINK_GROUP:RESCAN,xllm_server>")
 
 if(USE_MLU)
 cc_test(

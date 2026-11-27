@@ -207,7 +207,7 @@ Status VLMRequestFactory::validate_multimodal_request(
     return Status(StatusCode::INVALID_ARGUMENT,
                   "Typed media requires VLM Prefill with disaggregated PD");
   };
-  if (!options_->enable_disagg_pd() || options_->enable_pd_ooc() ||
+  if (!options_->enable_disagg_pd() ||
       InstanceRole(options_->instance_role()) != InstanceRole::PREFILL ||
       !options_->enable_service_routing() || sp.decode_address.empty()) {
     return invalid();

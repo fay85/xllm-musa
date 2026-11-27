@@ -20,7 +20,6 @@ package xllm.proto;
 
 import "common.proto";
 import "provider.proto";
-import "rec.proto";
 
 // Next ID: 52
 message CompletionRequest {
@@ -117,8 +116,8 @@ message CompletionRequest {
   optional int32 num_return_sequences = 41;
 
   optional bool add_special_tokens = 30;
-  // tensor for rec embedding.
-  repeated InferInputTensor input_tensors = 31;
+  reserved 31;
+  reserved "input_tensors";
 
   optional int32 ttft_slo_ms = 32;
 
@@ -200,6 +199,6 @@ message CompletionResponse {
   // usage statistics for the completion request.
   Usage usage = 6;
 
-  // for rec output
-  repeated InferOutputTensor output_tensors = 7;
+  reserved 7;
+  reserved "output_tensors";
 }

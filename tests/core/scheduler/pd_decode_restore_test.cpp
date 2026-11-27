@@ -188,8 +188,7 @@ class TestDisaggPDScheduler final
 
 DisaggPDScheduler::Options make_decode_options() {
   DisaggPDScheduler::Options options;
-  options.enable_pd_ooc(false)
-      .enable_disagg_pd(true)
+  options.enable_disagg_pd(true)
       .enable_schedule_overlap(false)
       .instance_role(InstanceRole::DECODE)
       .max_seqs_per_batch(4);
@@ -354,8 +353,7 @@ class HostRestoreSchedulerTest : public ::testing::Test {
                                            speculative_tokens,
                                            /*dp_size=*/2);
     auto options = make_decode_options();
-    options.enable_pd_ooc(false)
-        .priority_strategy(strategy)
+    options.priority_strategy(strategy)
         .enable_chunked_prefill(true)
         .dp_size(2)
         .num_speculative_tokens(speculative_tokens)

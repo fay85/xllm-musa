@@ -89,7 +89,6 @@ std::string Options::to_string() const {
      << ", nnodes: " << nnodes() << ", node_rank: " << node_rank()
      << ", enable_schedule_overlap: " << enable_schedule_overlap()
      << ", enable_disagg_pd: " << enable_disagg_pd()
-     << ", enable_pd_ooc: " << enable_pd_ooc()
      << ", enable_offline_inference: " << enable_offline_inference()
      << ", enable_sleep_mode: " << enable_sleep_mode()
      << ", disable_log_stats: " << disable_log_stats()
@@ -135,7 +134,6 @@ std::string Options::to_string() const {
      << ", input_shm_size: " << input_shm_size()
      << ", output_shm_size: " << output_shm_size()
      << ", is_local: " << is_local() << ", beam_width: " << beam_width()
-     << ", rec_worker_max_concurrency: " << rec_worker_max_concurrency()
      << ", master_status: " << master_status().to_string()
      << ", server_idx: " << server_idx();
   ss << "]";

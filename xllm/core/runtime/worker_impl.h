@@ -48,12 +48,10 @@ limitations under the License.
 #include "framework/sampling/sampler.h"
 #include "framework/state_dict/state_dict.h"
 #include "framework/tokenizer/tokenizer.h"
-#include "framework/xtensor/xtensor.h"
 #include "options.h"
 #include "platform/device.h"
 #include "util/threadpool.h"
 #if defined(USE_NPU)
-#include "framework/kv_cache_transfer/mooncake_weight_transfer.h"
 #include "framework/parallel_state/npu_dp_ep_padding.h"
 #include "layers/npu/loader/rolling_load_manager.h"
 #endif
@@ -124,9 +122,6 @@ class WorkerImpl {
                               const std::vector<uint16_t>& ports);
 
   // P2P link for weight transfer
-  virtual bool link_p2p(const std::string& remote_addr);
-  virtual bool unlink_p2p(const std::string& remote_addr);
-
   // prepare input for execution
   virtual ForwardInput prepare_inputs(Batch& batch);
 
@@ -395,21 +390,13 @@ class WorkerImpl {
   // model
   int64_t get_num_layers() const;
 
-  bool wakeup_local(const WakeupOptions& options);
-
-  // ---- RL deep-sleep path (SleepableAllocator), isolated from the xtensor
-  // ---- (PageAllocator) sleep/wakeup path. ----
-  // True when this worker uses the RL SleepableAllocator path rather than the
-  // xtensor PageAllocator path.
-  bool rl_sleep_mode() const;
+  // RL deep sleep uses the VMM-backed SleepableAllocator.
   // Enable manual-loader weight routing into the SleepableAllocator. Called
   // once during init_model before the layers are constructed.
   void setup_rl_sleep_weights();
   // Deep sleep / wake the SleepableAllocator regions (weights + KV).
   bool rl_sleep();
   bool rl_wakeup();
-  // Original xtensor (PageAllocator) sleep path.
-  bool xtensor_sleep(MasterStatus master_status);
 
 #if defined(USE_CUDA) || defined(USE_MUSA) || defined(USE_DCU)
   void refresh_cuda_block_copy_runtime_state();
@@ -435,7 +422,6 @@ class WorkerImpl {
   DpEpPaddingCache draft_dp_ep_padding_cache_{kDraftDpEpPaddingCacheCapacity};
   std::vector<int32_t> target_graph_capture_sizes_;
 
-  bool wakeup_from_remote_weights(const WakeupOptions& options);
   // Complete rolling initialization by delegating to model-owned rolling
   // runtime (manager + buffer): decoder preload, non-decoder reload, and
   // decoder ATB binding refresh.
@@ -527,7 +513,6 @@ class WorkerImpl {
 #endif
 
 #if defined(USE_NPU)
-  std::unique_ptr<MooncakeWeightTransfer> weight_transfer_;
   std::unique_ptr<Stream> load_stream_;
 
   // Lazily-built cache backing npu_cp_plan_runtime_config().

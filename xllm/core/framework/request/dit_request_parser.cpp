@@ -33,7 +33,6 @@ limitations under the License.
 #include "core/framework/request/dit_request_params.h"
 #include "core/framework/request/dit_request_state.h"
 #include "core/framework/request/dit_source_decoder.h"
-#include "core/runtime/params_utils.h"
 #include "core/util/binary_payload.h"
 #include "core/util/timer.h"
 #include "core/util/utils.h"

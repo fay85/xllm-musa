@@ -35,7 +35,6 @@ class EngineType {
     SSM = 1,
     VLM = 2,
     DIT = 3,
-    REC = 4,
     VLMSSM = 5,
     INVALID = -1,
   };
@@ -52,8 +51,6 @@ class EngineType {
       value_ = VLMSSM;
     } else if (str == "DIT" || str == "dit") {
       value_ = DIT;
-    } else if (str == "REC" || str == "rec") {
-      value_ = REC;
     } else {
       value_ = INVALID;
     }
@@ -80,8 +77,6 @@ class EngineType {
       return "VLMSSM";
     } else if (this->value_ == DIT) {
       return "DIT";
-    } else if (this->value_ == REC) {
-      return "REC";
     } else {
       return "INVALID";
     }
@@ -236,22 +231,6 @@ struct RawToken {
   std::vector<float> embeddings;  // hidden states
 };
 
-struct RecItemInfo {
-  // The decoded recommendation item id.
-  int64_t item_id = 0;
-  // The DID associated with the recommendation item.
-  std::string did;
-  // The business type associated with the recommendation item.
-  std::string type;
-};
-
-// Weight segment info for P2P transfer (supports non-contiguous allocation)
-// Forward declaration needed by InstanceInfo
-struct WeightSegment {
-  uint64_t offset;  // Offset from GlobalXTensor base address
-  uint64_t size;    // Segment size in bytes
-};
-
 // Values of InstanceInfo.cp_index_write_mode (InstanceMetaInfo.
 // cp_index_write_mode on the wire): which pages of each INDEX resource a
 // CP/KV-split instance actually writes. The local process fixes this to
@@ -299,10 +278,6 @@ struct InstanceInfo {
   // tpot profiling data
   std::vector<std::tuple<int32_t, int32_t, double>> tpot_profiling_data;
 
-  // XTensor mode: total physical pages per worker (all workers have the same
-  // total)
-  size_t total_phy_pages = 0;
-
   nlohmann::json serialize_to_json() const {
     nlohmann::json json_val;
     json_val["name"] = name;
@@ -334,16 +309,8 @@ struct InstanceInfo {
     json_val["ports"] = ports;
     json_val["ttft_profiling_data"] = ttft_profiling_data;
     json_val["tpot_profiling_data"] = tpot_profiling_data;
-    // XTensor mode info
-    json_val["total_phy_pages"] = total_phy_pages;
     return json_val;
   }
-};
-
-// XTensor mode: per-layer offsets for KV cache transfer
-struct XTensorLayerOffsets {
-  std::vector<uint64_t> k_offsets;  // K cache offsets in GlobalXTensor
-  std::vector<uint64_t> v_offsets;  // V cache offsets in GlobalXTensor
 };
 
 // Transfer mapping for one cache group. group_id is an opaque, stable
@@ -376,10 +343,6 @@ struct TransferKVInfo {
   bool rank_local_mapping = false;
   int32_t dp_rank = 0;
   InstanceInfo remote_instance_info;
-
-  // XTensor mode: destination offsets from D-node (per-layer)
-  // Only populated when KVCacheConfig::enable_xtensor is true.
-  std::vector<XTensorLayerOffsets> dst_xtensor_layer_offsets;
 
   // One entry per cache id space. group_id is unique within one request.
   std::vector<KVTransferMapping> mappings;
@@ -499,20 +462,8 @@ class MasterStatus {
   Value value_;
 };
 
-// Options for remote weight wakeup
 struct WakeupOptions {
   MasterStatus master_status = MasterStatus::WAKEUP;
-  std::vector<std::string> remote_addrs;
-  // Each remote_addr has a list of weight segments to pull
-  // Segments are ordered and should be concatenated at destination
-  std::vector<std::vector<WeightSegment>> src_weight_segments;
 };
-
-inline constexpr int32_t REC_TOKEN_SIZE = 3;
-using RecTokenTriple = std::array<int32_t, REC_TOKEN_SIZE>;
-inline constexpr const char* LLM_REC_INPUT_TOKENS = "llm_rec_input_tokens";
-inline constexpr const char* LLM_REC_INPUT_INDICES = "llm_rec_input_indices";
-inline constexpr const char* LLM_REC_INPUT_EMBEDDING =
-    "llm_rec_input_embedding";
 
 }  // namespace xllm

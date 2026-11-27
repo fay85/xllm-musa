@@ -41,7 +41,6 @@ limitations under the License.
 #include "platform/platform.h"
 #include "runtime/acl_graph_bucket_policy.h"
 #include "scheduler/profile/graph_warmup.h"
-#include "util/rec_model_utils.h"
 #include "util/utils.h"
 
 namespace xllm {
@@ -120,15 +119,14 @@ ProfileManager::ProfileManager(Engine* engine, const Options& options)
 
 #if defined(USE_NPU) || defined(USE_CUDA) || defined(USE_MLU)
   const auto& execution_config = ::xllm::ExecutionConfig::get_instance();
-  const bool collect_only =
-      execution_config.enable_static_kernel() &&
-      execution_config.enable_graph() &&
-      (execution_config.disable_graph_warmup() || is_rec_multi_round_mode()) &&
-      options_.instance_role() != InstanceRole::PREFILL;
+  const bool collect_only = execution_config.enable_static_kernel() &&
+                            execution_config.enable_graph() &&
+                            execution_config.disable_graph_warmup() &&
+                            options_.instance_role() != InstanceRole::PREFILL;
   if (collect_only) {
     // Static Kernel still needs decode inputs when normal warmup is skipped.
     warmup_decode_for_graph();
-  } else if (!is_rec_multi_round_mode()) {
+  } else {
     if (execution_config.enable_graph()) {
       if (execution_config.disable_graph_warmup()) {
         LOG(INFO) << "Graph warmup disabled by execution config; graphs will "

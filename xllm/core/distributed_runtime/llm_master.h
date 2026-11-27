@@ -108,10 +108,6 @@ class LLMMaster : public Master {
                            uint64_t lora_int_id) override;
   bool unload_lora_broadcast(const std::string& lora_name) override;
 
-  bool link_p2p(const std::vector<std::string>& remote_addrs) override;
-
-  bool unlink_p2p(const std::vector<std::string>& remote_addrs) override;
-
   // Async RL training support: pause/resume.
   // mode: "keep" (default), "abort", or "wait" — see ContinuousScheduler.
   void pause_scheduler(const std::string& mode = "keep");

@@ -91,9 +91,6 @@ class WorkerClient {
                               const std::vector<uint16_t>& ports);
 
   // P2P link for weight transfer
-  virtual bool link_p2p(const std::string& remote_addr);
-  virtual bool unlink_p2p(const std::string& remote_addr);
-
   virtual bool pull_kv_blocks(const uint64_t src_cluster_id,
                               const std::string& src_addr,
                               const std::vector<KVTransferMapping>& mappings);

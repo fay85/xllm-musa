@@ -794,7 +794,6 @@ TEST(ConfigJsonTest, LoadJsonFileReadsConfigFixture) {
   EXPECT_EQ(kv_cache_config.indexer_cache_dtype(), "int8");
   EXPECT_FALSE(kv_cache_config.enable_prefix_cache());
   EXPECT_EQ(kv_cache_config.xxh3_128bits_seed(), 2048);
-  EXPECT_TRUE(kv_cache_config.enable_xtensor());
   EXPECT_EQ(kv_cache_config.phy_page_granularity_size(), 4096);
 
   EXPECT_EQ(scheduler_config.max_tokens_per_batch(), 2048);

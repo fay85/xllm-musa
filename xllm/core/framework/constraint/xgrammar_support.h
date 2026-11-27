@@ -80,13 +80,6 @@ class XGrammarMachineCache final {
 // Runtime feature switches that gate the xgrammar structured-output backend.
 // Mirrors the engine config so the support check is a pure, testable function.
 struct XGrammarSupportInputs final {
-  // Regular disagg PD passed the real cross-instance verification (1P1D,
-  // production-aligned Mooncake: the grammar spec rides the KV first
-  // generation handoff and the decode side rebuilds the machine and applies
-  // the mask per token), so it is no longer gated. PD OOC stays fail-closed:
-  // pd_ooc_scheduler does not populate the grammar fields on its allocation
-  // requests yet, and that path has no cross-instance verification.
-  bool enable_pd_ooc = false;
   bool enable_service_routing = false;
   bool enable_prefix_cache = false;
   int32_t num_speculative_tokens = 0;

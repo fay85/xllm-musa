@@ -56,11 +56,3 @@ MLU 上的 GLM-5.3-Flash 对应 `glm5_next`，当前支持文本生成；此处�
 | Flux |   ✅   |   ✅   |   ❌   |   ❌   |
 
 MLU 已接入 Flux、Flux Control 和 Flux Fill，分别对应 `flux`、`flux_control` 和 `fluxfill`；不包含 Flux2。
-
-## Rec
-|     |  NPU  |  MLU  |  ILU  | 海光 DCU |
-| --- | :---: | :---: | :---: | :---: |
-| OneRec  |   ✅   |   ❌   |   ❌   |   ❌   |
-| Qwen2   |   ✅   |   ❌   |   ❌   |   ❌   |
-| Qwen2.5 |   ✅   |   ❌   |   ❌   |   ❌   |
-| Qwen3   |   ✅   |   ❌   |   ❌   |   ❌   |

@@ -1518,7 +1518,7 @@ TEST(ReshardPlannerTest, SupportsCompositeDescriptors) {
   EXPECT_EQ(regions[0].length + regions[1].length, kTokenCount);
 }
 
-TEST(RequestRegionBinderTest, BindsExplicitXTensorResourceOffsets) {
+TEST(RequestRegionBinderTest, BindsExplicitResourceOffsets) {
   WorkerCacheLayoutManifest source = make_head_manifest(0, 1, 1, 0, "source");
   WorkerCacheLayoutManifest destination =
       make_head_manifest(0, 1, 1, 0, "destination");

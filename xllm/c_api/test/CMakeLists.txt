@@ -234,7 +234,7 @@ add_executable(xllm_test
   ${CMAKE_CURRENT_LIST_DIR}/utils.cpp
 )
 
-# rec.h / types.h: installed C API under /usr/local/xllm/include (run xllm/c_api/install.sh).
+# llm.h / types.h: installed C API under /usr/local/xllm/include (run xllm/c_api/tools/install.sh).
 # Local test headers (utils.h): ${CMAKE_CURRENT_LIST_DIR}
 target_include_directories(xllm_test
   PRIVATE

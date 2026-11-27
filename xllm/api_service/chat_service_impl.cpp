@@ -38,10 +38,8 @@ limitations under the License.
 #include "core/common/instance_name.h"
 #include "core/common/types.h"
 #include "core/distributed_runtime/llm_master.h"
-#include "core/distributed_runtime/rec_master.h"
 #include "core/distributed_runtime/vlm_master.h"
 #include "core/framework/lora/lora_runtime.h"
-#include "core/framework/request/rec_type.h"
 #include "core/framework/request/request_params.h"
 #include "core/runtime/xservice_client.h"
 #include "core/util/binary_payload.h"
@@ -537,17 +535,6 @@ ChatServiceImpl::ChatServiceImpl(LLMMaster* master,
   add_model_master(models[0], master);
 }
 
-ChatServiceImpl::ChatServiceImpl(RecMaster* master,
-                                 const std::vector<std::string>& models)
-    : APIServiceImpl(models),
-      rec_master_(master),
-      // RecMaster does not expose tool_call_parser/reasoning_parser options,
-      // and the current Rec scenario does not require these features.
-      tool_call_parser_format_(""),
-      reasoning_parser_format_("") {
-  CHECK(rec_master_ != nullptr);
-}
-
 void ChatServiceImpl::add_model_master(const std::string& model,
                                        LLMMaster* master) {
   CHECK(master != nullptr);
@@ -563,112 +550,6 @@ LLMMaster* ChatServiceImpl::get_model_master(const std::string& model) const {
     return nullptr;
   }
   return it->second;
-}
-
-void ChatServiceImpl::process_rec_chat_request(std::shared_ptr<ChatCall> call) {
-  CHECK(rec_master_ != nullptr);
-  const auto& rpc_request = call->request();
-  const auto& model = rpc_request.model();
-
-  if (rec_master_->rec_type() != RecType::kLlmRec) {
-    call->finish_with_error(StatusCode::INVALID_ARGUMENT,
-                            "Chat is only supported for LLMRec models");
-    return;
-  }
-
-  if (rec_master_->get_rate_limiter()->is_limited()) {
-    call->finish_with_error(api_service_internal::rate_limiter_rejection_status(
-        *rec_master_->get_rate_limiter()));
-    return;
-  }
-
-  RequestParams request_params(
-      rpc_request, call->get_x_request_id(), call->get_x_request_time());
-  request_params.timing = call->request_timing();
-  request_params.timing->record_arrival();
-
-  // Build messages from rpc request (inline code, not extracted to helper)
-  std::vector<Message> messages;
-  messages.reserve(rpc_request.messages_size());
-  for (const auto& message : rpc_request.messages()) {
-    messages.emplace_back(message.role(), message.content());
-    auto& msg = messages.back();
-
-    if (message.has_tool_call_id()) {
-      msg.tool_call_id = message.tool_call_id();
-    }
-
-    if (message.has_reasoning_content()) {
-      msg.reasoning_content = message.reasoning_content();
-    }
-
-    if (message.tool_calls_size() > 0) {
-      Message::ToolCallVec tool_calls;
-      tool_calls.reserve(message.tool_calls_size());
-      for (const auto& tool_call : message.tool_calls()) {
-        tool_calls.emplace_back();
-        auto& tc = tool_calls.back();
-        tc.id = tool_call.id();
-        tc.type = tool_call.type();
-        tc.function.name = tool_call.function().name();
-        tc.function.arguments = tool_call.function().arguments();
-      }
-      msg.tool_calls = std::move(tool_calls);
-    }
-  }
-
-  bool include_usage = false;
-  if (rpc_request.has_stream_options()) {
-    include_usage = rpc_request.stream_options().include_usage();
-  }
-
-  // Parse prompt tokens from routing (inline code, not extracted to helper)
-  std::optional<std::vector<int>> prompt_tokens = std::nullopt;
-  if (rpc_request.has_routing()) {
-    prompt_tokens = std::vector<int>{};
-    prompt_tokens->reserve(rpc_request.token_ids_size());
-    for (int i = 0; i < rpc_request.token_ids_size(); i++) {
-      prompt_tokens->emplace_back(rpc_request.token_ids(i));
-    }
-    request_params.decode_address = rpc_request.routing().decode_name();
-  }
-
-  auto saved_streaming = request_params.streaming;
-  auto saved_request_id = request_params.request_id;
-
-  rec_master_->handle_request(
-      std::move(messages),
-      std::move(prompt_tokens),
-      std::nullopt,
-      std::move(request_params),
-      [call,
-       model,
-       master = rec_master_,
-       stream = std::move(saved_streaming),
-       include_usage = include_usage,
-       first_message_sent = std::unordered_set<size_t>(),
-       request_id = std::move(saved_request_id),
-       created_time = absl::ToUnixSeconds(absl::Now())](
-          const RequestOutput& req_output) mutable -> bool {
-        if (req_output.status.has_value()) {
-          const auto& status = req_output.status.value();
-          if (!status.ok()) {
-            return call->finish_with_error(status);
-          }
-        }
-
-        if (stream) {
-          return send_delta_to_client_brpc(call,
-                                           include_usage,
-                                           &first_message_sent,
-                                           request_id,
-                                           created_time,
-                                           model,
-                                           req_output);
-        }
-        return send_result_to_client_brpc(
-            call, request_id, created_time, model, req_output);
-      });
 }
 
 // chat_async for brpc with xllm_serice
@@ -739,17 +620,6 @@ void ChatServiceImpl::process_async_impl(std::shared_ptr<ChatCall> call) {
   call->request_timing()->record_arrival();
   const auto& rpc_request = call->request();
   const auto& model = rpc_request.model();
-
-  // Route to RecMaster if configured
-  if (rec_master_) {
-    if (unlikely(!models_.contains(model))) {
-      call->finish_with_error(
-          api_service_internal::model_not_supported_status());
-      return;
-    }
-    process_rec_chat_request(call);
-    return;
-  }
 
   // LoRA lookup: the `model` field may name a registered LoRA adapter
   // instead of a base model. If so, pin it (drain-safe) and resolve the

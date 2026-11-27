@@ -42,15 +42,10 @@ class HFModelLoader : public ModelLoader {
 
   std::vector<std::unique_ptr<StateDict>>& get_state_dicts() override;
 
-  int64_t get_total_weight_size() const override;
-
-  int64_t get_non_decoder_weight_size() const override;
-
   int64_t get_max_decoder_layer_weight_size() const override;
 
  private:
   bool load_args(const std::string& model_weights_path);
-  bool load_rec_vocab(const std::string& model_weights_path);
   bool load_model_args(const std::string& model_weights_path);
   bool load_quant_args(const std::string& model_weights_path);
   bool load_tokenizer_args(const std::string& model_weights_path);

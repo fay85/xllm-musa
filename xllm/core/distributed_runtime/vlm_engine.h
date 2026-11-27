@@ -102,10 +102,6 @@ class VLMEngine : public Engine {
                       const int32_t src_kv_split_size = 1) override;
 
   // P2P link for weight transfer - each worker links to one remote addr
-  bool link_p2p(const std::vector<std::string>& remote_addrs) override;
-
-  bool unlink_p2p(const std::vector<std::string>& remote_addrs) override;
-
  private:
   friend class VLMEngineCacheTestPeer;
 

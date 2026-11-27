@@ -20,12 +20,8 @@ cc_library(
     vlm_engine.h
     vlm_master.h
     speculative_engine.h
-    rec_engine.h
-    rec_master.h
     disagg_pd_service.h
     disagg_pd_service_impl.h
-    pd_ooc_service.h
-    pd_ooc_service_impl.h
     dist_manager.h
     remote_worker.h
     worker_server.h
@@ -43,12 +39,8 @@ cc_library(
     vlm_engine.cpp
     vlm_master.cpp
     speculative_engine.cpp
-    rec_engine.cpp
-    rec_master.cpp
     disagg_pd_service.cpp
     disagg_pd_service_impl.cpp
-    pd_ooc_service.cpp
-    pd_ooc_service_impl.cpp
     dist_manager.cpp
     remote_worker.cpp
     worker_server.cpp
@@ -66,7 +58,6 @@ cc_library(
     $<$<BOOL:${USE_NPU}>:xllm_atb_layers>
     $<$<BOOL:${USE_NPU}>:unified_dlog>
     :collective_service
-    :xtensor
     :worker_prefetch_session
 )
 

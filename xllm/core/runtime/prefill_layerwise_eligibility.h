@@ -46,7 +46,6 @@ class PrefillLayerwiseEligibility final {
   bool enable_prefill_piecewise_graph = false;
   bool is_draft_engine = false;
   bool enable_sleep_mode = false;
-  bool enable_xtensor = false;
   bool enable_kvcache_store = false;
   double host_blocks_factor = 1.0;
   int32_t cp_size = 1;
@@ -84,7 +83,7 @@ class PrefillLayerwiseEligibility final {
     }
     if (!pd_prefill_only) {
       return "Prefill layerwise offload requires a disaggregated PREFILL "
-             "instance without PD online-offline co-location.";
+             "instance.";
     }
     if (!push_transfer) {
       return "Prefill layerwise offload currently requires PD PUSH.";
@@ -117,9 +116,6 @@ class PrefillLayerwiseEligibility final {
     }
     if (enable_sleep_mode) {
       return "Prefill layerwise offload does not support sleep mode.";
-    }
-    if (enable_xtensor) {
-      return "Prefill layerwise offload does not support XTensor.";
     }
     if (enable_kvcache_store || host_blocks_factor > 1.0) {
       return "Prefill layerwise offload owns its Host data; Host/Store "

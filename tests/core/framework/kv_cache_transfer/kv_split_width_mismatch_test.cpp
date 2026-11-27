@@ -87,7 +87,7 @@ namespace {
 
 // The mapping decision, bound to the production composition both dispatch
 // overrides run (resolve_kv_split_plan, disagg_pd_scheduler.cpp /
-// pd_ooc_scheduler.cpp): the declared widths and the source's write mode
+// disagg_pd_scheduler.cpp): the declared widths and the source's write mode
 // decide whether the rank-local shape is available, and the response's group
 // types decide whether it is appropriate for this cache layout. The instances
 // these tests model run the default replicated write mode.
@@ -364,7 +364,8 @@ TEST(KvSplitWidthMismatchTest, LinearSingleLocalMapsOntoRemoteWrite) {
   BlockManager::Options options;
   options.num_blocks(4).block_size(128);
   BlockManagerImpl manager(options);
-  Sequence sequence = make_sequence(manager.allocate(1), /*prompt_token_count=*/8);
+  Sequence sequence =
+      make_sequence(manager.allocate(1), /*prompt_token_count=*/8);
   std::vector<Block> linear = manager.allocate(1);
   ASSERT_EQ(linear.size(), 1u);
   const int32_t local_write = linear.front().id();
@@ -377,8 +378,8 @@ TEST(KvSplitWidthMismatchTest, LinearSingleLocalMapsOntoRemoteWrite) {
   mapping.remote_ids = {502};
   info.mappings.emplace_back(std::move(mapping));
 
-  const TransferKVInfo step = build_transfer_step(
-      info, &sequence, /*seq_len=*/8, /*kv_split_size=*/1);
+  const TransferKVInfo step =
+      build_transfer_step(info, &sequence, /*seq_len=*/8, /*kv_split_size=*/1);
   ASSERT_EQ(step.mappings.size(), 1u);
   EXPECT_EQ(step.mappings[0].local_ids,
             std::vector<uint64_t>{static_cast<uint64_t>(local_write)});

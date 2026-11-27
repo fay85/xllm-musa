@@ -225,8 +225,8 @@ inline torch::Tensor normalize_positions_for_device(
 
 inline bool has_contiguous_input_buffer_exclusions(
     const ModelInputParams& params) {
-  return params.multimodal.mm_data.valid() || params.has_onerec_params() ||
-         params.has_llmrec_params() || params.dit_forward_input.has_value() ||
+  return params.multimodal.mm_data.valid() ||
+         params.dit_forward_input.has_value() ||
          !params.multimodal.deep_stacks.empty();
 }
 
@@ -425,19 +425,6 @@ enum class KvSlotLayout : int8_t {
   NPU_CP_RECOVERED_PHYSICAL = 1,  // Already CP-expanded; skip re-prepare.
 };
 
-// Step-level decode metadata for Rec multi-round (device loop).
-struct StepDecodeMeta {
-  int32_t batch_size = 0;
-  int32_t beam_width = 1;
-  int32_t current_round = 0;
-  int32_t total_round = 0;
-  // Planned decode kv cache shape: [batch_size * beam_width, n_kv_heads,
-  // step_rounds, head_dim]
-  std::vector<int64_t> full_kv_shape;
-  // Flattened decode positions for each sequence.
-  std::vector<int32_t> decode_positions_vec;
-};
-
 // Inputs for forward execution
 struct ForwardInput {
   ForwardInput to(const torch::Device& device, torch::ScalarType dtype) const {
@@ -554,7 +541,6 @@ struct ForwardInput {
 
   void copy_metadata_to(ForwardInput& inputs) const {
     inputs.transfer_kv_infos = transfer_kv_infos;
-    inputs.step_decode = step_decode;
     inputs.skip_sampling_for_logits_only = skip_sampling_for_logits_only;
     inputs.return_selected_hidden = return_selected_hidden;
     inputs.kv_slot_layout = kv_slot_layout;
@@ -607,12 +593,6 @@ struct ForwardInput {
     LOG(INFO) << " params.do_sample " << sampling_params.do_sample;
   }
 
-  const StepDecodeMeta* step_meta() const {
-    return step_decode ? &(*step_decode) : nullptr;
-  }
-
-  bool has_step_meta() const { return step_decode.has_value(); }
-
   // flatten token ids
   torch::Tensor token_ids;
   // flatten positions
@@ -632,8 +612,6 @@ struct ForwardInput {
   // Errors detected while aligning prior overlap output with grammar rows.
   std::vector<JsonObjectOutputError> json_object_errors;
 
-  // step-level decode metadata
-  std::optional<StepDecodeMeta> step_decode;
   // If true, skip sampler forward and only keep logits.
   bool skip_sampling_for_logits_only = false;
   // If true, populate ForwardOutput.selected_hidden with hidden states matching
@@ -719,7 +697,6 @@ struct ForwardOutput {
   int64_t prepared_token = -1;
 
   BeamSearchOutput beam_search_output;
-  torch::Tensor beam_sequence_group;
 
   // dit output data
   DiTForwardOutput dit_forward_output;
@@ -792,15 +769,8 @@ struct RawForwardOutput {
   std::vector<int32_t> out_tokens;
   std::vector<float> out_logprobs;
 
-  // batch-level beam output for Rec multi-round mode
-  std::vector<int32_t> beam_sequence_group;  // flattened 2D
   // dit output data
   DiTForwardOutput dit_forward_output;
-};
-
-struct BatchedForwardInputs {
-  std::vector<ForwardInput> micro_inputs;
-  SamplingParameters concated_sampling_params;
 };
 
 }  // namespace xllm

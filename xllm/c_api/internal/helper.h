@@ -28,10 +28,8 @@ limitations under the License.
 #include "c_api/types.h"
 #include "core/common/instance_name.h"
 #include "core/distributed_runtime/llm_master.h"
-#include "core/distributed_runtime/rec_master.h"
 #include "core/framework/request/request_output.h"
 #include "core/framework/request/request_params.h"
-#include "core/util/rec_model_utils.h"
 
 /**
  * @brief Opaque handle for LLM inference instance
@@ -50,37 +48,14 @@ struct XLLM_LLM_Handler {
   std::unique_ptr<folly::CPUThreadPoolExecutor> executor;
 };
 
-/**
- * @brief Opaque handle for REC (Recommendation) inference instance
- */
-struct XLLM_REC_Handler {
-  /** Flag indicating if REC instance is initialized and ready for inference */
-  bool initialized{false};
-
-  /** Selected REC pipeline type for the loaded model */
-  xllm::RecPipelineType pipeline_type{xllm::RecPipelineType::kLlmRecDefault};
-
-  /** List of loaded recommendation model IDs */
-  std::vector<std::string> model_ids;
-
-  /** Core controller for REC runtime management */
-  std::unique_ptr<xllm::RecMaster> master;
-
-  /** Thread pool for asynchronous recommendation task scheduling */
-  std::unique_ptr<folly::CPUThreadPoolExecutor> executor;
-};
-
 namespace xllm {
 namespace helper {
 
-enum class BackendType { LLM = 0, VLM = 1, REC = 2 };
+enum class BackendType { LLM = 0, VLM = 1 };
 
 enum class InferenceType {
   LLM_COMPLETIONS = 0,
   LLM_CHAT_COMPLETIONS = 1,
-  REC_COMPLETIONS = 2,
-  REC_CHAT_COMPLETIONS = 3,
-  REC_TOKENID_COMPLETIONS = 4,
 };
 
 #define XLLM_SET_META_STRING_FIELD(DST, SRC_STR)                              \
@@ -131,7 +106,6 @@ XLLM_Response* build_error_response(const std::string& request_id,
  */
 XLLM_Response* build_success_response(const InferenceType& inference_type,
                                       const xllm::RequestOutput& output,
-                                      xllm::RecPipelineType rec_pipeline_type,
                                       const std::string& request_id,
                                       int64_t created_time,
                                       const std::string& model);

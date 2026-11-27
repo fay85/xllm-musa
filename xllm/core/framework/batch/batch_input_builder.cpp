@@ -74,33 +74,6 @@ uint32_t get_sample_source_position(const SampleSlot& sample_slot) {
   return static_cast<uint32_t>(sample_slot.token_position - 1);
 }
 
-void append_xtensor_offsets(TransferKVInfo* info,
-                            const TransferKVInfo& full_info,
-                            size_t remote_id_count,
-                            const std::vector<size_t>& remote_idxs) {
-  if (full_info.dst_xtensor_layer_offsets.empty()) {
-    return;
-  }
-
-  info->dst_xtensor_layer_offsets.reserve(
-      full_info.dst_xtensor_layer_offsets.size());
-  for (const XTensorLayerOffsets& full_layer :
-       full_info.dst_xtensor_layer_offsets) {
-    CHECK_EQ(full_layer.k_offsets.size(), remote_id_count);
-    CHECK_EQ(full_layer.v_offsets.size(), remote_id_count);
-    XTensorLayerOffsets layer;
-    layer.k_offsets.reserve(remote_idxs.size());
-    layer.v_offsets.reserve(remote_idxs.size());
-    for (size_t remote_idx : remote_idxs) {
-      CHECK_LT(remote_idx, full_layer.k_offsets.size());
-      CHECK_LT(remote_idx, full_layer.v_offsets.size());
-      layer.k_offsets.emplace_back(full_layer.k_offsets[remote_idx]);
-      layer.v_offsets.emplace_back(full_layer.v_offsets[remote_idx]);
-    }
-    info->dst_xtensor_layer_offsets.emplace_back(std::move(layer));
-  }
-}
-
 std::vector<int32_t> build_q_cu_seq_lens_vec(
     const std::vector<int32_t>& q_seq_lens) {
   std::vector<int32_t> q_cu_seq_lens;
@@ -319,7 +292,6 @@ TransferKVInfo BatchInputBuilder::build_step_transfer_info(
   info.rank_local_mapping = full_info.rank_local_mapping;
   info.dp_rank = full_info.dp_rank;
   info.remote_instance_info = full_info.remote_instance_info;
-  info.dst_xtensor_layer_offsets.clear();
 
   const bool grouped =
       std::any_of(full_info.mappings.begin(),
@@ -516,8 +488,6 @@ TransferKVInfo BatchInputBuilder::build_step_transfer_info(
       continue;
     }
     if (is_kv && !grouped) {
-      append_xtensor_offsets(
-          &info, full_info, full_mapping.remote_ids.size(), remote_idxs);
     }
     info.mappings.emplace_back(std::move(step_mapping));
   }

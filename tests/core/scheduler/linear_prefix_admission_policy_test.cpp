@@ -628,7 +628,6 @@ class LinearPrefixCheckpointTest : public ::testing::Test {
     params.streaming = false;
     params.enable_schedule_overlap = false;
     params.is_graph_warmup = is_graph_warmup;
-    params.rec_type = RecType::kNone;
     params.bos_token_id = 0;
     params.request_id = "linear_prefix_checkpoint_test";
     params.sampling_param = &sampling_param_;

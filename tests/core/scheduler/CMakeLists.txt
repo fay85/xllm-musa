@@ -11,6 +11,7 @@ cc_test(
     request_phase_output_test.cpp
     ${PROJECT_SOURCE_DIR}/xllm/core/scheduler/async_response_processor.cpp
   DEPS
+    :batch
     :config
     :request
     :util
@@ -29,7 +30,6 @@ cc_test(
   SRCS
     disagg_pd_scheduler_test.cpp
     continuous_scheduler_test.cpp
-    fixed_steps_scheduler_test.cpp
     scheduler_policy_test.cpp
     linear_prefix_admission_policy_test.cpp
   DEPS
@@ -99,7 +99,7 @@ foreach(test_target scheduler_test pd_decode_restore_test pd_inflight_lifetime_t
   if(USE_NPU)
     # Keep target dependencies so CMake repeats the complete static-library SCC.
     # A partial RESCAN group can introduce API/runtime references too late.
-    target_link_libraries(${test_target} PRIVATE :xtensor :xllm_server)
+    target_link_libraries(${test_target} PRIVATE :xllm_server)
   elseif(test_target STREQUAL "dit_scheduler_test")
     # Rescan execution/request archives without merging shared target cycles.
     # batch.cpp consumes request_timing, so that archive belongs in the rescan
@@ -107,26 +107,9 @@ foreach(test_target scheduler_test pd_decode_restore_test pd_inflight_lifetime_t
     # symbols after the last request_timing scan.
     # Runtime and block objects also consume provider and prefix-cache symbols.
     target_link_libraries(${test_target} PRIVATE
-      "$<LINK_GROUP:RESCAN,xtensor,xllm_server,xgrammar_constraint,$<TARGET_FILE:runtime>,$<TARGET_FILE:batch>,$<TARGET_FILE:request>,$<TARGET_FILE:request_timing>,$<TARGET_FILE:kv_cache>,$<TARGET_FILE:block>,$<TARGET_FILE:block_hasher>,$<TARGET_FILE:provider_contract>,$<TARGET_FILE:prefix_cache>,$<TARGET_FILE:prefix_cache_journal>>")
+      "$<LINK_GROUP:RESCAN,xllm_server,xgrammar_constraint,$<TARGET_FILE:runtime>,$<TARGET_FILE:batch>,$<TARGET_FILE:request>,$<TARGET_FILE:request_timing>,$<TARGET_FILE:kv_cache>,$<TARGET_FILE:block>,$<TARGET_FILE:block_hasher>,$<TARGET_FILE:provider_contract>,$<TARGET_FILE:prefix_cache>,$<TARGET_FILE:prefix_cache_journal>>")
   else()
     target_link_libraries(${test_target} PRIVATE
-      "$<LINK_GROUP:RESCAN,xtensor,xllm_server>")
+      "$<LINK_GROUP:RESCAN,xllm_server>")
   endif()
 endforeach()
-
-# Register extracted multiline cases even with source-scanning GTest discovery.
-if(TARGET scheduler_test)
-  foreach(case_filter IN ITEMS
-    VlmPDMetadataTest.OocDispatchRejectsMediaBeforeOnlineOrOfflineSerialization
-    VlmPDBestOfTest.MissingPrefixCacheRejectsFreshCandidatesAndReleasesDonor
-  )
-    if(NOT TEST "${case_filter}")
-      add_test(NAME "${case_filter}"
-        COMMAND "$<TARGET_FILE:scheduler_test>" "--gtest_filter=${case_filter}")
-      set_tests_properties("${case_filter}" PROPERTIES
-        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
-        LABELS "target:scheduler_test"
-        SKIP_REGULAR_EXPRESSION "\\[  SKIPPED \\]")
-    endif()
-  endforeach()
-endif()

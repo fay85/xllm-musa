@@ -245,8 +245,6 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
     const ForwardInput& input,
     ForwardSyncPolicy sync_policy,
     bool record_ready_event) {
-  MULTI_MODEL_STEP_LOCK(::xllm::KVCacheConfig::get_instance().enable_xtensor());
-
   Timer timer;
   auto& sampling_params = input.sampling_params;
 
@@ -504,7 +502,6 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
 
     if (!enable_schedule_overlap() && !driver_ && !dp_driver_ &&
         !options_.enable_speculative_decode()) {
-      MULTI_MODEL_STEP_UNLOCK();
       if (sync_policy == ForwardSyncPolicy::NO_SYNC) {
         wait_kv_push();
         return make_non_driver_forward_output(ForwardOutput{},
@@ -593,7 +590,6 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
     }
   }
 
-  MULTI_MODEL_STEP_UNLOCK();
   bool should_sync_default_stream = true;
 #if defined(USE_NPU)
   should_sync_default_stream =

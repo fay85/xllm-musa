@@ -78,8 +78,6 @@ class BaseLoader {
   // Manual-mode: re-allocate device storage, async H2D copy, rebuild views.
   virtual void reload_weights();
 
-  // Manual-mode P2P path: device buffer already filled (e.g. by xtensor
-  // allocator or rolling load), just rebuild views.
   virtual void reload_weights_from_device();
 
   // Rolling-load path: refresh device slot pointer from rolling buffer and

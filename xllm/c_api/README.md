@@ -38,12 +38,11 @@ You will see the following files in /usr/local/xllm directory:
 |-- include
 |   |-- llm.h
 |   |-- default.h
-|   |-- rec.h
 |   `-- types.h
 `-- lib
     `-- libxllm.so
 
-3 directories, 5 files
+3 directories, 4 files
 ```
 
 ### How to compile c_api examples
@@ -87,26 +86,4 @@ g++ <example>.cpp -o <example> \
   -lcust_opapi \
   -Wl,-rpath=/usr/local/xllm/lib \
   -Wl,-rpath=/usr/local/Ascend/ascend-toolkit/latest/opp/vendors/xllm/op_api/lib
-```
-
-
-If `-lcust_opapi` is missing from the NPU link command, the linker may report
-undefined references to symbols such as `aclnnBeamSearchGroup` and
-`aclnnXAttention`.
-
-### How to run c_api examples
-
-Some examples, such as `simple_rec_completions`, support overriding the target
-device from `argv[1]`.
-
-#### NPU
-
-```
-./simple_rec_completions npu:14
-```
-
-#### GPU
-
-```
-./simple_rec_completions cuda:0
 ```

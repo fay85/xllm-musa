@@ -280,8 +280,6 @@ void DisaggPDServiceImpl::release_reservation(
     const proto::ReleaseReservationRequest* request,
     proto::ReleaseReservationResponse* response) {
   bool unsafe_leased = false;
-  // Pass the raw intent; the scheduler applies the PD-OOC opt-out where the
-  // lease is created.
   const bool released =
       scheduler_->release_reservation(request->req_id(),
                                       request->reservation_id(),
@@ -402,32 +400,6 @@ void DisaggPDServiceImpl::decode_recv_new_requests(
         group->set_group_id(cache_group_id(BlockType::LINEAR));
         group->add_ids(static_cast<uint64_t>(linear_state_id));
       }
-      // XTensor mode: calculate and return GlobalXTensor offsets
-      if (::xllm::KVCacheConfig::get_instance().enable_xtensor() &&
-          !block_ids.empty()) {
-        std::vector<std::pair<std::vector<uint64_t>, std::vector<uint64_t>>>
-            layer_offsets;
-        if (engine_->get_xtensor_offsets_for_blocks(
-                dp_rank, block_ids, layer_offsets)) {
-          // Fill proto with per-layer offsets
-          for (const auto& [k_offsets, v_offsets] : layer_offsets) {
-            auto* layer_proto = resp->add_xtensor_layer_offsets();
-            for (const auto& k_off : k_offsets) {
-              layer_proto->add_k_offsets(k_off);
-            }
-            for (const auto& v_off : v_offsets) {
-              layer_proto->add_v_offsets(v_off);
-            }
-          }
-          VLOG(5) << "XTensor offsets added for request " << req.req_id()
-                  << ", num_blocks=" << block_ids.size()
-                  << ", num_layers=" << layer_offsets.size();
-        } else {
-          LOG(WARNING) << "Failed to get XTensor offsets for request "
-                       << req.req_id();
-        }
-      }
-
       resp->set_status_code(200);
     }
   }

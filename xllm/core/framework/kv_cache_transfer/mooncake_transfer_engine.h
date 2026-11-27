@@ -217,7 +217,7 @@ class MooncakeTransferEngine {
                                   const std::vector<uint64_t>& dst_blocks,
                                   const std::vector<int64_t>& buf_ids);
 
-  // XTensor mode uses raw offsets in the GlobalXTensor region in buffer[0].
+  // Use raw offsets in the registered region in buffer[0].
   bool move_memory_by_global_offsets(const std::string& remote_addr,
                                      const std::vector<uint64_t>& src_offsets,
                                      const std::vector<uint64_t>& dst_offsets,

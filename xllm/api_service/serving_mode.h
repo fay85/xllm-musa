@@ -28,7 +28,6 @@ enum class ServingMode : int8_t {
   LLM = 0,
   VLM = 1,
   DIT = 2,
-  REC = 3,
 };
 
 // Maps an engine-layer EngineType to its corresponding ServingMode.
@@ -41,8 +40,6 @@ inline ServingMode to_serving_mode(EngineType engine_type) {
       return ServingMode::VLM;
     case EngineType::DIT:
       return ServingMode::DIT;
-    case EngineType::REC:
-      return ServingMode::REC;
     default:
       return ServingMode::LLM;
   }

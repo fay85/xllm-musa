@@ -52,7 +52,6 @@ limitations under the License.
 #include "framework/request/request.h"
 #include "framework/request/request_state.h"
 #include "framework/request/sequence.h"
-#include "framework/xtensor/page_allocator.h"
 #include "runtime/xservice_client.h"
 #include "scheduler/continuous_scheduler.h"
 #include "util/env_var.h"
@@ -276,10 +275,7 @@ DisaggPDScheduler::DisaggPDScheduler(Engine* engine,
   if (!options_.instance_role().has_value()) {
     LOG(FATAL) << "Instance type is not set in disagg pd mode.";
   }
-  // The reserve keeps room for admitted decodes to grow; PD OOC keeps its
-  // own admission and never restores from host.
-  const bool reserve_decode = !options_.enable_pd_ooc() &&
-                              options_.instance_role() == InstanceRole::DECODE;
+  const bool reserve_decode = options_.instance_role() == InstanceRole::DECODE;
   const ::xllm::SchedulerConfig& scheduler_config =
       ::xllm::SchedulerConfig::get_instance();
   decode_admission_ = std::make_unique<DecodeAdmission>(
@@ -294,9 +290,7 @@ DisaggPDScheduler::DisaggPDScheduler(Engine* engine,
           .max_kv_cache_utilization =
               scheduler_config.prefill_scheduling_memory_usage_threshold()});
 
-  // Only initialize for non-OOC mode
-  // OOC mode (PDOOCScheduler) will handle initialization in its own constructor
-  if (start_services && !options_.enable_pd_ooc()) {
+  if (start_services) {
     // Start dispatch thread for prefill instance
     dispatch_thread_ = std::make_unique<std::thread>(
         &DisaggPDScheduler::dispatch_requests, this);
@@ -329,13 +323,10 @@ DisaggPDScheduler::~DisaggPDScheduler() {
     prefill_request_queue_.enqueue(nullptr);
   }
 
-  // Clean up common threads (shared by both OOC and non-OOC modes)
   if (rpc_server_thread_ && rpc_server_thread_->joinable()) {
     rpc_server_thread_->join();
   }
 
-  // Clean up dispatch thread (created in base class for non-OOC mode,
-  // or in subclass for OOC mode)
   if (dispatch_thread_ && dispatch_thread_->joinable()) {
     dispatch_thread_->join();
   }
@@ -361,9 +352,6 @@ void DisaggPDScheduler::initialize_rpc_server(const std::string& server_name) {
     return;
   }
   xservice_client_->set_scheduler(this);
-  if (::xllm::KVCacheConfig::get_instance().enable_xtensor()) {
-    xservice_client_->set_engine(engine_);
-  }
 }
 
 void DisaggPDScheduler::register_instance_info(const std::string& server_name,
@@ -398,16 +386,6 @@ void DisaggPDScheduler::register_instance_info(const std::string& server_name,
             << " ("
             << cp_index_write_mode_label(instance_info_.cp_index_write_mode)
             << "), dp_size = " << instance_info_.dp_size;
-
-  // Get total physical pages per worker (for etcd registration)
-#if defined(USE_NPU)
-  if (::xllm::KVCacheConfig::get_instance().enable_xtensor()) {
-    auto& page_allocator = PageAllocator::get_instance();
-    if (page_allocator.is_initialized()) {
-      instance_info_.total_phy_pages = page_allocator.get_num_total_phy_pages();
-    }
-  }
-#endif
 }
 
 void DisaggPDScheduler::profile_ttft() {
@@ -701,7 +679,6 @@ void DisaggPDScheduler::dispatch_requests() {
     // source shard addressed the same destination blocks. Refuse before the
     // decode reservation and the AddNewRequests RPC when the pair is not
     // expressible as a mapping. resolve_kv_split_plan is the shared
-    // resolution: the OOC dispatch override and the push-side width
     // validation compose the same decision.
     // The admission sequence (registry snapshot -> fail closed -> width
     // plan -> reject) lives in admit_kv_split_request; the record this
@@ -938,23 +915,6 @@ void DisaggPDScheduler::dispatch_requests() {
           // (and inserts a default width-1 record for a missing key) while
           // the gate used the scoped snapshot -- keep one source of truth.
           info.remote_instance_info = remote_info;
-
-          // XTensor mode: save destination offsets from D-node
-          if (resp.xtensor_layer_offsets_size() > 0) {
-            info.dst_xtensor_layer_offsets.reserve(
-                resp.xtensor_layer_offsets_size());
-            for (const auto& layer_offsets : resp.xtensor_layer_offsets()) {
-              XTensorLayerOffsets layer;
-              layer.k_offsets.assign(layer_offsets.k_offsets().begin(),
-                                     layer_offsets.k_offsets().end());
-              layer.v_offsets.assign(layer_offsets.v_offsets().begin(),
-                                     layer_offsets.v_offsets().end());
-              info.dst_xtensor_layer_offsets.emplace_back(std::move(layer));
-            }
-            VLOG(5) << "Received XTensor offsets from D-node for request "
-                    << requests[i]->request_id()
-                    << ", num_layers=" << info.dst_xtensor_layer_offsets.size();
-          }
 
           sequence->kv_state().set_transfer_kv_info(std::move(info));
 
@@ -1287,10 +1247,9 @@ void DisaggPDScheduler::release_failed_request(
 bool DisaggPDScheduler::reject_queued_request(
     const std::shared_ptr<Request>& request) {
   // Only the normal Prefill dispatch queue holds a Decode reservation but
-  // has not yet entered a forward. Do not release an OOC transfer or an
-  // already scheduled chunk whose source KV may still be in use.
-  if (options_.enable_pd_ooc() ||
-      options_.instance_role() == InstanceRole::DECODE ||
+  // has not yet entered a forward. Do not release an already scheduled
+  // chunk whose source KV may still be in use.
+  if (options_.instance_role() == InstanceRole::DECODE ||
       request->cancelled() || request->has_terminal_outcome() ||
       request->state().decode_address.empty() ||
       request->state().pd_reservation_id.empty()) {
@@ -1423,10 +1382,7 @@ bool DisaggPDScheduler::lease_waiting_reservation_if_unsafe_locked(
     const std::shared_ptr<Request>& request,
     absl::Time now,
     bool unsafe) {
-  // PD-OOC has no lease expiry loop, so a lease there would hold blocks
-  // forever. Keep that opt-out at the only place that creates leases; callers
-  // pass the raw unsafe intent and cannot bypass it.
-  if (request == nullptr || !unsafe || !supports_kv_unsafe_lease()) {
+  if (request == nullptr || !unsafe) {
     return false;
   }
   // The sender could not prove it stopped writing these buffers. Park the
@@ -1480,8 +1436,7 @@ proto::CancelRequestResponse::Result DisaggPDScheduler::cancel_request(
       cancellation.source_xservice_addr().empty()) {
     return Response::INVALID_ARGUMENT;
   }
-  if (options_.instance_role() != InstanceRole::DECODE ||
-      options_.enable_pd_ooc()) {
+  if (options_.instance_role() != InstanceRole::DECODE) {
     return Response::NOT_SUPPORTED;
   }
   std::shared_ptr<Request> request;
@@ -1818,8 +1773,7 @@ bool DisaggPDScheduler::exceeds_decode_capacity(Sequence* sequence) const {
   const BlockManagerPool* block_manager = engine_->block_manager_pool();
   CHECK(block_manager != nullptr);
   const BlockManagerPool::Options& block_options = block_manager->options();
-  if (block_options.enable_xtensor() ||
-      !block_options.manager_types().empty() ||
+  if (!block_options.manager_types().empty() ||
       (block_options.enable_host_offload() &&
        options_.instance_role() != InstanceRole::DECODE)) {
     return false;
@@ -2042,8 +1996,7 @@ bool DisaggPDScheduler::unlink_instance(
           // that instance instead of reusing blocks a dying writer may still
           // reach. PULL waiting reservations have no writer yet (Decode pulls
           // only after FirstGeneration consumes them), so the mode gate keeps
-          // them out of the lease. The lease helper applies the PD-OOC opt-out
-          // itself.
+          // them out of the lease.
           (void)lease_waiting_reservation_if_unsafe_locked(
               req_id,
               request,

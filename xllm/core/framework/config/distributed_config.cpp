@@ -23,11 +23,6 @@ DEFINE_string(master_node_addr,
               "The master address for multi-node distributed serving(e.g. "
               "10.18.1.1:9999).");
 
-DEFINE_string(
-    xtensor_master_node_addr,
-    "127.0.0.1:19889",
-    "The master address for XTensor distributed service(e.g. 10.18.1.1:9999).");
-
 DEFINE_int32(nnodes, 1, "The number of multi-nodes.");
 
 DEFINE_int32(node_rank, 0, "The node rank.");
@@ -66,7 +61,6 @@ namespace xllm {
 
 void DistributedConfig::from_flags() {
   XLLM_CONFIG_ASSIGN_FROM_FLAG(master_node_addr);
-  XLLM_CONFIG_ASSIGN_FROM_FLAG(xtensor_master_node_addr);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(nnodes);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(node_rank);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(etcd_addr);
@@ -80,7 +74,6 @@ void DistributedConfig::from_flags() {
 
 void DistributedConfig::from_json(const JsonReader& json) {
   XLLM_CONFIG_ASSIGN_FROM_JSON(master_node_addr);
-  XLLM_CONFIG_ASSIGN_FROM_JSON(xtensor_master_node_addr);
   XLLM_CONFIG_ASSIGN_FROM_JSON(nnodes);
   // don't read rank-related config
   // XLLM_CONFIG_ASSIGN_FROM_JSON(node_rank);
@@ -98,8 +91,6 @@ void DistributedConfig::append_config_json(
   const DistributedConfig default_config;
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, master_node_addr);
-  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
-      config_json, default_config, xtensor_master_node_addr);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(config_json, default_config, nnodes);
   // don't dump rank-related config
   //   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(

@@ -39,7 +39,6 @@ limitations under the License.
 #include "core/framework/config/kv_cache_config.h"
 #include "core/framework/config/model_config.h"
 #include "core/framework/config/parallel_config.h"
-#include "core/framework/config/rec_config.h"
 #include "core/framework/config/scheduler_config.h"
 #include "core/framework/config/speculative_config.h"
 #if defined(USE_NPU)
@@ -98,9 +97,6 @@ BatchMode resolve_batch_mode(const ContinuousScheduler::Options& options) {
   // PD PREFILL instance: always use exclusive batch (PrefillFirstPolicy).
   // Online decode for these requests runs on the decode instance, so mix batch
   // buys nothing and PrefillFirstPolicy gives cleaner chunk_queue priority.
-  // This is a PD-topology gate, hence is_pd_prefill_role() and not
-  // is_pd_prefill_only(): under enable_pd_ooc the offline requests that do
-  // decode here keep the same exclusive batching.
   if (is_pd_prefill_role(options)) {
     mode.enable_mix_batch = false;
   }
@@ -146,7 +142,7 @@ ContinuousScheduler::ContinuousScheduler(Engine* engine, const Options& options)
       server_label_(std::to_string(options.server_idx())),
       batch_mode_(resolve_batch_mode(options)),
       engine_(engine),
-      request_queue_(::xllm::RecConfig::get_instance().request_queue_size()) {
+      request_queue_(SchedulerConfig::get_instance().request_queue_size()) {
   CHECK(engine_ != nullptr);
 
   // UnifiedPolicy's mixed prefill/decode redistribution can trim or re-admit a
@@ -181,8 +177,8 @@ ContinuousScheduler::ContinuousScheduler(Engine* engine, const Options& options)
       has_linear_attention_layers(engine_->model_args()) &&
       cache_options.enable_linear_state() &&
       cache_options.manager_types().empty() &&
-      !cache_options.enable_xtensor() && !cache_options.instance_is_decode() &&
-      block_size > 0 && chunk_size > 0 && block_size % chunk_size != 0;
+      !cache_options.instance_is_decode() && block_size > 0 && chunk_size > 0 &&
+      block_size % chunk_size != 0;
   if (admission_enabled) {
     linear_prefix_admission_policy_ =
         std::make_unique<LinearPrefixAdmissionPolicy>(
@@ -246,13 +242,6 @@ ContinuousScheduler::ContinuousScheduler(Engine* engine, const Options& options)
       return;
     }
     xservice_client_->set_scheduler(this);
-    if (::xllm::KVCacheConfig::get_instance().enable_xtensor() &&
-        !options_.enable_disagg_pd()) {
-      xservice_client_->set_engine(engine_);
-      engine_->get_cache_info(instance_info_.cluster_ids,
-                              instance_info_.addrs,
-                              instance_info_.ports);
-    }
   }
 
   instance_info_.name = options_.instance_name().value_or("");
@@ -698,7 +687,6 @@ void ContinuousScheduler::step(const absl::Duration& timeout) {
 
   if (!options_.enable_schedule_overlap()) {
     // get a new batch of requests
-    last_batch_lengths_.clear();
     std::vector<Batch> batch = schedule_request(timeout);
     bool all_empty =
         std::all_of(batch.begin(), batch.end(), [](const Batch& one_batch) {
@@ -708,11 +696,7 @@ void ContinuousScheduler::step(const absl::Duration& timeout) {
       return;
     }
 
-    if (!options_.enable_pd_ooc()) {
-      engine_->step(batch);
-    } else {
-      step_with_pd_ooc(batch);
-    }
+    engine_->step(batch);
 
     // process request output in batch
     process_batch_output(false);
@@ -986,32 +970,6 @@ void ContinuousScheduler::update_memory_metrics(
       }
     }
   }
-}
-
-void ContinuousScheduler::step_with_pd_ooc(std::vector<Batch>& batch) {
-  for (size_t i = 0; i < batch.size(); i++) {
-    for (size_t j = 0; j < batch[i].size(); j++) {
-      last_batch_lengths_.push_back(batch[i][j]->num_tokens());
-    }
-  }
-
-  auto start = std::chrono::high_resolution_clock::now();
-  engine_->step(batch);
-  auto end = std::chrono::high_resolution_clock::now();
-  double duration_ms =
-      std::chrono::duration_cast<std::chrono::microseconds>(end - start)
-          .count() /
-      1000.0;
-
-  std::stringstream ss;
-  ss << "bs=" << last_batch_lengths_.size() << " - [";
-  for (size_t i = 0; i < last_batch_lengths_.size(); ++i) {
-    ss << last_batch_lengths_[i];
-    if (i != last_batch_lengths_.size() - 1) ss << ", ";
-  }
-  ss << "]";
-  VLOG(1) << "PERF - " << ss.str() << " - " << std::fixed
-          << std::setprecision(3) << duration_ms << " ms";
 }
 
 bool ContinuousScheduler::try_complete_pause() {

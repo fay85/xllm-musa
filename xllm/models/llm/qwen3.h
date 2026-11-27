@@ -22,7 +22,6 @@ limitations under the License.
 #include "core/framework/config/scheduler_config.h"
 #include "core/framework/model/aux_hidden_capture.h"
 #include "core/framework/model/model_output.h"
-#include "core/util/rec_model_utils.h"
 #if defined(USE_NPU)
 #include "core/layers/common/attention_mask.h"
 #endif
@@ -158,21 +157,8 @@ class QWen3ModelImplBase : public LlmModelImplBase<DecoderLayer> {
       if (!input_params_new.synchronize_layer(static_cast<uint32_t>(i))) {
         return ModelOutput();
       }
-      if (is_rec_multi_round_mode() && input_params_new.has_llmrec_params()) {
-        const auto& llmrec_params = input_params_new.llmrec_params();
-        attn_metadata.full_k_cache = llmrec_params->full_k_caches[i];
-        attn_metadata.full_v_cache = llmrec_params->full_v_caches[i];
-        attn_metadata.unshared_k_cache = llmrec_params->unshared_k_caches[i];
-        attn_metadata.unshared_v_cache = llmrec_params->unshared_v_caches[i];
-      }
 #if defined(USE_CUDA)
       attn_metadata.plan_info->layer_id = i;
-      if (attn_metadata.shared_plan_info != nullptr) {
-        attn_metadata.shared_plan_info->layer_id = i;
-      }
-      if (attn_metadata.unshared_plan_info != nullptr) {
-        attn_metadata.unshared_plan_info->layer_id = i;
-      }
 #endif
       auto& layer = layers_[i];
       h = layer(h,

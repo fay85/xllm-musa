@@ -36,7 +36,7 @@ class BlockManagerImpl : public BlockManager {
 
   // Flat incremental growth: allocate ceil(num_tokens/block_size) - held blocks
   // and return them (does not insert into the sequence). The shared default for
-  // KV / xtensor leaves; SlidingWindow and Single override.
+  // KV leaves; SlidingWindow and Single override.
   std::optional<std::vector<Block>> allocate_for_sequence(
       Sequence* seq,
       KVCacheState& kv_state,

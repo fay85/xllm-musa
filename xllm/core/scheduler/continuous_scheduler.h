@@ -36,7 +36,6 @@ limitations under the License.
 #include "async_response_processor.h"
 #include "common/macros.h"
 #include "common/types.h"
-#include "core/framework/config/rec_config.h"
 #include "framework/batch/batch.h"
 #include "framework/block/kv_cache_manager.h"
 #include "framework/request/priority_comparator.h"
@@ -121,8 +120,6 @@ class ContinuousScheduler : public Scheduler {
     // enable disaggregated PD mode.
     PROPERTY(bool, enable_disagg_pd) = false;
 
-    PROPERTY(bool, enable_pd_ooc) = false;
-
     // for master service, current instance name(ID).
     PROPERTY(std::optional<std::string>, instance_name);
 
@@ -176,9 +173,6 @@ class ContinuousScheduler : public Scheduler {
     // Index ID for internal server ID, which must be set different values
     // if the model supports multiple version or there are multiple models.
     PROPERTY(int64_t, server_idx) = 0;
-
-    // max concurrency for rec worker
-    PROPERTY(int32_t, rec_worker_max_concurrency) = 1;
   };
 
   ContinuousScheduler(Engine* engine, const Options& options);
@@ -216,8 +210,6 @@ class ContinuousScheduler : public Scheduler {
                            std::vector<int64_t>& tbt) override {}
 
   const InstanceInfo& get_instance_info() override { return instance_info_; }
-
-  std::vector<int> last_batch_lengths_;
 
   // Async RL training support: pause/resume
   enum class PauseState {
@@ -300,7 +292,6 @@ class ContinuousScheduler : public Scheduler {
   KVCacheManager* kv_cache_manager_;
 
   // a thread safe queue of requests, bounded by
-  // ::xllm::RecConfig::get_instance().request_queue_size() the schedule
   // owns the requests and manages their lifetimes.
   folly::MPMCQueue<std::shared_ptr<Request>> request_queue_;
 
@@ -409,8 +400,6 @@ class ContinuousScheduler : public Scheduler {
   void process_batch_output(bool enable_schedule_overlap);
 
   void step_with_schedule_overlap(const absl::Duration& timeout);
-
-  void step_with_pd_ooc(std::vector<Batch>& batch);
 
   void refresh_sequences_from_requests(
       const std::vector<std::shared_ptr<Request>>& requests,

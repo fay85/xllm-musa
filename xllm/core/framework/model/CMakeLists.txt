@@ -5,7 +5,6 @@ cc_library(
     model
   HDRS
     causal_lm.h
-    rec_causal_lm.h
     causal_vlm.h
     dit_model.h
     aux_hidden_capture.h

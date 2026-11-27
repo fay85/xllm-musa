@@ -94,10 +94,8 @@ size_t get_recommended_granularity(int32_t device_id) {
 }
 
 void create_phy_mem_handle(PhyMemHandle& phy_mem_handle, int32_t device_id) {
-  // Allocate a single granularity-sized (e.g. 2MB) physical page. This is the
-  // xtensor page-allocator path: it delegates the actual allocation to the
-  // size-aware overload and additionally records the granularity in the global
-  // KV cache config (used by the per-page map()/unmap() of that path).
+  // Allocate a single physical page and record the granularity used by
+  // the per-page map()/unmap() overloads.
   const size_t granularity_size = get_recommended_granularity(device_id);
   create_phy_mem_handle(phy_mem_handle, device_id, granularity_size);
   ::xllm::KVCacheConfig::get_instance().phy_page_granularity_size(
@@ -128,7 +126,7 @@ void create_phy_mem_handle(PhyMemHandle& phy_mem_handle,
   // 2MB-granularity huge pages. This backs an arbitrary-size allocation (a
   // multi-GiB chunk uses multiple 2MB pages). ACL_HBM_MEM_HUGE1G (1GiB pages,
   // fewer page-table entries / better TLB) is only available on A2/A3, so we
-  // keep the portable 2MB option, consistent with the xtensor KV path.
+  // keep the portable 2MB option.
   prop.memAttr = ACL_HBM_MEM_HUGE;
   prop.location.type = ACL_MEM_LOCATION_TYPE_DEVICE;
   prop.location.id = device_id;
@@ -318,8 +316,7 @@ void unmap(VirPtr& vir_ptr, size_t aligned_size) {
 void unmap_chunk(VirPtr& vir_ptr, size_t size) {
 #if defined(USE_NPU)
   // NPU: the chunk was mapped by a single aclrtMapMem covering `size`, so one
-  // aclrtUnmapMem at the base address unmaps the whole chunk (unlike unmap(),
-  // which unmaps per 2MB page as mapped by the xtensor path).
+  // aclrtUnmapMem at the base address unmaps the whole chunk.
   (void)size;
   int32_t ret = aclrtUnmapMem(reinterpret_cast<void*>(vir_ptr));
   CHECK_EQ(ret, 0) << "Failed to unmap virtual memory chunk";

@@ -91,11 +91,6 @@ class Batch {
                                      const ModelArgs& args,
                                      int32_t cp_size = 1);
 
-  ForwardInput prepare_rec_forward_input(uint32_t num_decoding_tokens,
-                                         uint32_t min_decoding_batch_size,
-                                         const ModelArgs& args,
-                                         MPMCThreadPool* thread_pool = nullptr);
-
   // Prepare ForwardInput for distributed transport.
   ForwardInput prepare_forward_input(const ModelArgs& args,
                                      ThreadPool* thread_pool,
@@ -122,8 +117,7 @@ class Batch {
   // The boolean parameter `replace_fake_token` indicates
   // whether the current stage is the second stage.
   void process_sample_output(const SampleOutput& sample_output,
-                             bool replace_fake_token,
-                             bool force_requested_beam_result_size = false);
+                             bool replace_fake_token);
 
   void process_sample_output(const RawForwardOutput& raw_output,
                              bool replace_fake_token,
@@ -132,11 +126,6 @@ class Batch {
   // process output for beam search kernel
   void process_beam_search_output(const RawForwardOutput& raw_output,
                                   bool replace_fake_token);
-
-  void process_beam_sequence_group(const RawForwardOutput& raw_output);
-  void process_beam_sequence_group(const ForwardOutput& output);
-  // mark all sequences as finished (used by rec model multi-round decoding)
-  void finish();
 
   // Finalize confirmed tokens using the core output batch event, after all
   // sequence mutations. Explicit timestamps support deterministic tests.
@@ -147,9 +136,6 @@ class Batch {
   }
 
   // Refresh sequences_ from sequence_groups_ after beam search processing.
-  // This is needed for RecEngine because SequencesGroup::process_beam_search()
-  // replaces its internal sequences_, invalidating pointers in
-  // Batch::sequences_.
   void refresh_sequences_from_groups();
 
   const std::vector<uint32_t>& get_allowed_max_tokens() const {
@@ -157,7 +143,6 @@ class Batch {
   }
 
   // Get all sequences from either sequences_ or sequence_groups_
-  // Used by RecEngine to access sequences for stopping checker evaluation
   std::vector<Sequence*> get_sequences();
   std::vector<Sequence*> get_sequences() const;
 
@@ -170,7 +155,6 @@ class Batch {
 
   void stamp_host_restore(ForwardInput& forward_input);
   void refresh_output_targets();
-  void refresh_onerec_prefill_output_targets();
   bool update_sequence_state(Sequence* seq, bool replace_fake_token);
 
   void append_token_for_sequence(Sequence* seq,
@@ -178,7 +162,7 @@ class Batch {
                                  int token_idx,
                                  bool replace_fake_token);
 
-  void process_beam_search(bool force_requested_result_size = false);
+  void process_beam_search();
   bool has_partial_finished_beam_group() const;
 
   std::unordered_map<uint32_t, uint32_t> cal_seq_exchange_index(

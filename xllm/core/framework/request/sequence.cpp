@@ -36,210 +36,22 @@ limitations under the License.
 #include "core/framework/config/execution_config.h"
 #include "core/framework/config/model_config.h"
 #include "core/framework/config/multimodal_config.h"
-#include "core/framework/config/rec_config.h"
 #include "core/framework/constraint/builtin_json_machine.h"
 #include "core/framework/constraint/xgrammar_machine.h"
 #include "core/framework/model/model_args.h"
 #include "core/framework/multimodal/embedding_output.h"
 #include "core/framework/multimodal/mm_visitor.h"
 #include "core/framework/prefix_cache/block_hasher.h"
-#include "core/framework/tokenizer/rec_tokenizer.h"
 #include "core/framework/tokenizer/tokenizer.h"
 #include "core/util/slice.h"
 #include "core/util/tensor_helper.h"
-#include "rec_type.h"
 
 namespace xllm {
 
 namespace {
-constexpr size_t kDecoderBosTokenCount = 1;
-constexpr size_t kDecoderMaxTokenCount = kRecTotalSteps + kDecoderBosTokenCount;
 constexpr char kEmptyLogprobsFinishReason[] = "empty_logprobs";
 
-std::vector<int64_t> normalize_rec_item_ids(const std::vector<int64_t>& raw_ids,
-                                            size_t sequence_index) {
-  std::vector<int64_t> item_ids;
-  item_ids.reserve(raw_ids.size());
-  std::unordered_set<int64_t> seen_item_ids;
-  for (const int64_t item_id : raw_ids) {
-    if (seen_item_ids.insert(item_id).second) {
-      item_ids.emplace_back(item_id);
-    }
-  }
-
-  const int32_t each_threshold =
-      ::xllm::RecConfig::get_instance().each_conversion_threshold();
-  if (each_threshold > 0 &&
-      static_cast<int32_t>(item_ids.size()) > each_threshold) {
-    uint32_t seed =
-        ::xllm::ExecutionConfig::get_instance().random_seed() >= 0
-            ? static_cast<uint32_t>(
-                  ::xllm::ExecutionConfig::get_instance().random_seed()) +
-                  static_cast<uint32_t>(sequence_index)
-            : std::random_device{}();
-    std::mt19937 generator(seed);
-    std::shuffle(item_ids.begin(), item_ids.end(), generator);
-    item_ids.resize(each_threshold);
-  }
-
-  return item_ids;
-}
-
-std::vector<RecItemInfo> normalize_rec_item_infos(
-    const std::vector<RecItemInfo>& raw_item_infos,
-    size_t sequence_index) {
-  std::vector<RecItemInfo> item_infos;
-  item_infos.reserve(raw_item_infos.size());
-  std::unordered_set<int64_t> seen_item_ids;
-  for (const RecItemInfo& item_info : raw_item_infos) {
-    if (seen_item_ids.insert(item_info.item_id).second) {
-      item_infos.emplace_back(item_info);
-    }
-  }
-
-  const int32_t each_threshold =
-      ::xllm::RecConfig::get_instance().each_conversion_threshold();
-  if (each_threshold > 0 &&
-      static_cast<int32_t>(item_infos.size()) > each_threshold) {
-    uint32_t seed =
-        ::xllm::ExecutionConfig::get_instance().random_seed() >= 0
-            ? static_cast<uint32_t>(
-                  ::xllm::ExecutionConfig::get_instance().random_seed()) +
-                  static_cast<uint32_t>(sequence_index)
-            : std::random_device{}();
-    std::mt19937 generator(seed);
-    std::shuffle(item_infos.begin(), item_infos.end(), generator);
-    item_infos.resize(each_threshold);
-  }
-
-  return item_infos;
-}
 }  // namespace
-
-const std::string Sequence::ENCODER_SPARSE_EMBEDDING_NAME = "sparse_embedding";
-const std::string Sequence::DECODER_CONTEXT_EMBEDDING_NAME =
-    "decoder_context_embedding";
-
-void Sequence::init_onerec_sequence(
-    const std::vector<int32_t>& prompt_token_ids,
-    torch::Tensor input_embedding) {
-  auto& onerec_state = onerec_state_.emplace();
-  if (!prompt_token_ids.empty()) {
-    onerec_state.encoder_tokens.assign(prompt_token_ids.begin(),
-                                       prompt_token_ids.end());
-    onerec_state.num_encoder_tokens = prompt_token_ids.size();
-  } else {
-    auto encoder_sparse_embedding =
-        mm_data_.get<torch::Tensor>(ENCODER_SPARSE_EMBEDDING_NAME);
-    CHECK(encoder_sparse_embedding.has_value())
-        << "encoder sparse embedding not found in mm_data";
-    onerec_state.num_encoder_tokens = encoder_sparse_embedding.value().size(0);
-  }
-
-  auto decoder_context_embedding =
-      mm_data_.get<torch::Tensor>(DECODER_CONTEXT_EMBEDDING_NAME);
-
-  size_t capacity = kDecoderMaxTokenCount;
-  if (decoder_context_embedding.has_value()) {
-    num_prompt_tokens_ = 0;
-    onerec_state.num_decoder_embeddings =
-        decoder_context_embedding.value().size(0);
-    capacity =
-        onerec_state.num_decoder_embeddings + capacity - kDecoderBosTokenCount;
-  } else {
-    num_prompt_tokens_ = kDecoderBosTokenCount;
-  }
-
-  tokens_.resize(capacity);
-  for (size_t i = 0; i < num_prompt_tokens_; ++i) {
-    tokens_[num_tokens_++] = sequence_params_.bos_token_id;
-    token_to_count_map_[sequence_params_.bos_token_id]++;
-  }
-  volatile_num_prompt_tokens_ = num_prompt_tokens_;
-  input_embedding_ = std::move(input_embedding);
-  cur_generated_token_idx_ = num_prompt_tokens_;
-  // OneRec can also emit per-token logprobs via enable_output_sku_logprobs
-  // (see generate_onerec_streaming_output), independent of the sampling flag,
-  // so allocate the logprob buffer when either path needs it. The beam readers
-  // index both buffers by token position (see the main constructor), so keep
-  // them allocated for beam requests too.
-  const bool is_beam_search = sequence_params_.sampling_param->beam_width > 1;
-  const bool enable_logprobs =
-      sequence_params_.sampling_param->logprobs ||
-      ::xllm::RecConfig::get_instance().enable_output_sku_logprobs() ||
-      is_beam_search;
-  const bool enable_top_logprobs =
-      sequence_params_.sampling_param->top_logprobs > 0 || is_beam_search;
-  logprob_state_ = LogprobState(
-      num_prompt_tokens_, capacity, enable_logprobs, enable_top_logprobs);
-}
-
-void Sequence::generate_onerec_streaming_output(const Slice<int32_t>& ids,
-                                                size_t size,
-                                                SequenceOutput& output) const {
-  output.index = index_;
-  output.token_ids = ids.slice(num_prompt_tokens_, size);
-}
-
-void Sequence::generate_onerec_output(const Slice<int32_t>& ids,
-                                      size_t size,
-                                      const Tokenizer& tokenizer,
-                                      SequenceOutput& output) const {
-  output.index = index_;
-  if (output_embedding_.defined()) {
-    output.embedding = output_embedding_;
-  }
-  if (finish_reason_ != FinishReason::NONE) {
-    output.finish_reason = finish_reason_.to_string();
-  }
-  output.token_ids = ids.slice(num_prompt_tokens_, size);
-  if (::xllm::RecConfig::get_instance().enable_output_sku_logprobs()) {
-    const auto& token_logprobs = logprob_state_.get_logprobs();
-    output.token_ids_logprobs.reserve(output.token_ids.size());
-    for (size_t i = num_prompt_tokens_; i < size; ++i) {
-      if (i < token_logprobs.size()) {
-        output.token_ids_logprobs.emplace_back(token_logprobs[i]);
-      } else {
-        output.token_ids_logprobs.emplace_back();
-      }
-    }
-  }
-  const size_t rec_token_size = static_cast<size_t>(REC_TOKEN_SIZE);
-  if (::xllm::RecConfig::get_instance().enable_convert_tokens_to_item() &&
-      output.token_ids.size() == rec_token_size) {
-    const Slice<int32_t> token_slice{output.token_ids.data(),
-                                     output.token_ids.size()};
-    if (::xllm::RecConfig::get_instance().enable_extended_item_info()) {
-      const auto* rec_tokenizer = dynamic_cast<const RecTokenizer*>(&tokenizer);
-      if (rec_tokenizer != nullptr) {
-        std::vector<RecItemInfo> item_infos;
-        const bool ok =
-            rec_tokenizer->decode_item_infos(token_slice, &item_infos);
-        if (ok && !item_infos.empty()) {
-          output.item_infos_list = normalize_rec_item_infos(item_infos, index_);
-          output.item_ids_list.reserve(output.item_infos_list.size());
-          for (const RecItemInfo& item_info : output.item_infos_list) {
-            output.item_ids_list.emplace_back(item_info.item_id);
-          }
-          if (!output.item_infos_list.empty()) {
-            output.item_ids = output.item_ids_list.front();
-            output.item_info = output.item_infos_list.front();
-          }
-        }
-      }
-    } else {
-      std::vector<int64_t> item_ids;
-      const bool ok = tokenizer.decode(
-          token_slice, sequence_params_.skip_special_tokens, &item_ids);
-      if (ok && !item_ids.empty()) {
-        output.item_ids_list = normalize_rec_item_ids(item_ids, index_);
-        if (!output.item_ids_list.empty()) {
-          output.item_ids = output.item_ids_list.front();
-        }
-      }
-    }
-  }
-}
 
 Sequence::Sequence(size_t index,
                    const std::vector<int32_t>& prompt_token_ids,
@@ -285,11 +97,6 @@ Sequence::Sequence(size_t index,
         std::make_unique<XGrammarState>(*sequence_params_.xgrammar_constraint,
                                         constraint_machine_->grammar_id());
   }
-  if (is_onerec_model()) {
-    init_onerec_sequence(prompt_token_ids, std::move(input_embedding));
-    return;
-  }
-
   CHECK(!prompt_token_ids.empty()) << "empty prompt token ids";
   auto capacity = sequence_params_.seq_capacity;
   CHECK_GT(capacity, prompt_token_ids.size()) << "capacity too small";
@@ -375,7 +182,6 @@ Sequence::Sequence(const Sequence& other, size_t index)
       block_hashes_by_stride_(other.block_hashes_by_stride_),
       hash_type_(other.hash_type_),
       linear_prefix_checkpoint_(other.linear_prefix_checkpoint_),
-      onerec_state_(other.onerec_state_),
       // Beam candidates diverge: copy the matcher state, never share it.
       json_object_state_(other.json_object_state_ == nullptr
                              ? nullptr
@@ -564,10 +370,8 @@ void Sequence::append_token(const Token& token) {
       << "exceed the token capacity of the sequence";
   CHECK(!finished_ && !error_status().has_value())
       << "cannot append token to a finished sequence";
-  if (!is_onerec_model()) {
-    CHECK(kv_state_.kv_cache_tokens_num() > 0 && !is_chunked_prefill_stage())
-        << "cannot append token to a prefill sequence";
-  }
+  CHECK(kv_state_.kv_cache_tokens_num() > 0 && !is_chunked_prefill_stage())
+      << "cannot append token to a prefill sequence";
 
   const int32_t token_id = static_cast<int32_t>(token.id);
   if (!try_commit_json_object_token(token_id, /*token_offset=*/-1)) {
@@ -798,11 +602,6 @@ std::optional<SequenceOutput> Sequence::generate_streaming_output(
 
   SequenceOutput output;
   output.generated_token_count = num_committed_generated_tokens();
-  if (is_onerec_model()) {
-    generate_onerec_streaming_output(ids, size, output);
-    return output;
-  }
-
   // Hold back a potential multi-token stop suffix. The max with the decoder
   // offset also keeps delayed streaming callbacks from moving it backwards.
   const size_t decodable_token_count =
@@ -984,12 +783,6 @@ SequenceOutput Sequence::generate_output(const Tokenizer& tokenizer) {
   const size_t size = num_valid_tokens();
 
   output.generated_token_count = num_committed_generated_tokens();
-
-  // 3. generate onerec output
-  if (is_onerec_model()) {
-    generate_onerec_output(ids, size, tokenizer, output);
-    return output;
-  }
 
   const size_t decodable_token_count = get_decodable_token_count(size);
 
@@ -1247,10 +1040,6 @@ bool Sequence::finished() const {
   // return the cached finish status
   if (!finish_status_invalidated_) {
     return finished_;
-  }
-
-  if (is_onerec_model() && num_tokens_ == num_prompt_tokens_) {
-    return false;
   }
 
   // Embedding sequence never be finished until it updates its embeddings

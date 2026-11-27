@@ -16,7 +16,6 @@ limitations under the License.
 #pragma once
 
 #include "fast_tokenizer.h"
-#include "rec_tokenizer.h"
 #include "rwkv_tokenizer.h"
 #include "sentencepiece_tokenizer.h"
 #include "tiktoken_tokenizer.h"

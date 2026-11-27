@@ -29,18 +29,13 @@ namespace layer {
 // Slot index = layer_index % num_slots.
 //
 // Memory allocation strategy:
-//   - enable_xtensor=true:  memory is allocated via XTensorAllocator
-//                           (counted in weight pages budget)
-//   - enable_xtensor=false: memory is allocated via aclrtMalloc
+// Memory is allocated via aclrtMalloc
 class RollingWeightBuffer {
  public:
   // num_slots: number of cached decoder layer slots(N =
   // rolling_load_num_cached_layers) storage_size: byte size of one decoder
-  // layer's weights (aligned) model_id: XTensor model id
-  //           (used when enable_xtensor=true; ignored otherwise)
-  RollingWeightBuffer(int32_t num_slots,
-                      size_t storage_size,
-                      const std::string& model_id = "");
+  // layer's weights (aligned).
+  RollingWeightBuffer(int32_t num_slots, size_t storage_size);
   ~RollingWeightBuffer();
 
   // Non-copyable
@@ -51,8 +46,6 @@ class RollingWeightBuffer {
   void* get_slot_ptr(int32_t layer_index) const;
 
   // Refresh rolling buffer base pointer from current weight allocation.
-  // In xtensor mode this reserves/updates a new address in the current
-  // weight region after wakeup.
   void refresh_address();
 
   size_t slot_size() const { return storage_size_; }
@@ -62,10 +55,7 @@ class RollingWeightBuffer {
  private:
   int32_t num_slots_;
   size_t storage_size_;
-  std::string model_id_;
   void* base_ptr_ = nullptr;
-  bool use_xtensor_ =
-      false;  // whether memory came from XTensor (not aclrtMalloc)
 };
 
 }  // namespace layer

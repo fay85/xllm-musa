@@ -69,10 +69,6 @@ class Master {
     return false;
   }
 
-  virtual bool link_p2p(const std::vector<std::string>& remote_addrs) {
-    return false;
-  }
-
   // Start/stop online timeline profiling on all workers. Forwards to the
   // engine, which broadcasts to every worker. CUDA only for now.
   virtual bool start_profile() {
@@ -81,10 +77,6 @@ class Master {
 
   virtual bool stop_profile() {
     return engine_ ? engine_->stop_profile() : false;
-  }
-
-  virtual bool unlink_p2p(const std::vector<std::string>& remote_addrs) {
-    return false;
   }
 
   MasterStatus get_master_status() const { return master_status_; }
@@ -124,7 +116,5 @@ std::optional<std::string> validate_qwen_dcp_topology(int32_t global_world_size,
 
 std::unique_ptr<Master> create_master(const std::string& backend,
                                       const Options& options);
-
-std::unique_ptr<Master> fork_master(Master* master, const Options& options);
 
 }  // namespace xllm

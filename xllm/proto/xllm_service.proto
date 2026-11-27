@@ -44,32 +44,13 @@ message HttpResponse {
 
 message MasterInfos {
   string model_id = 1;
-  string model_path = 2;
-  string master_node_addr = 3;
   MasterStatus master_status = 4;
-  repeated string remote_addrs = 5;
-  int32 nnodes = 6;
-  int32 dp_size = 7;
-  // Per-remote-addr weight segments (index matches remote_addrs)
-  repeated MasterWeightSegmentList src_weight_segments = 8;
+  reserved 2, 3, 5 to 8;
+  reserved "model_path", "master_node_addr", "remote_addrs", "nnodes",
+      "dp_size", "src_weight_segments";
 }
 
 // A single weight segment for master wakeup
-message MasterWeightSegment {
-  uint64 offset = 1;
-  uint64 size = 2;
-}
-
-// List of weight segments for one remote source
-message MasterWeightSegmentList {
-  repeated MasterWeightSegment segments = 1;
-}
-
-message P2PLinkRequest {
-  string model_id = 1;
-  repeated string remote_addrs = 2;
-}
-
 // Async RL training support: pause/resume
 message PauseRequest {
   // How to handle in-flight requests: "keep" (default), "abort", or "wait".
@@ -134,8 +115,6 @@ service XllmAPIService {
 
   rpc AnthropicMessagesHttp (HttpRequest) returns (HttpResponse);
 
-  rpc ForkMaster (MasterInfos) returns (Status);
-  rpc ForkMasterHttp (HttpRequest) returns (HttpResponse);
   
   rpc Sleep (MasterInfos) returns (Status);
   rpc SleepHttp (HttpRequest) returns (HttpResponse);
@@ -155,11 +134,7 @@ service XllmAPIService {
   rpc UnloadLoraAdapterHttp (HttpRequest) returns (HttpResponse);
   rpc ListLoraAdaptersHttp (HttpRequest) returns (HttpResponse);
 
-  rpc LinkP2P (P2PLinkRequest) returns (Status);
-  rpc LinkP2PHttp (HttpRequest) returns (HttpResponse);
 
-  rpc UnlinkP2P (P2PLinkRequest) returns (Status);
-  rpc UnlinkP2PHttp (HttpRequest) returns (HttpResponse);
 
   // Async RL training support: pause/resume
   rpc Pause (PauseRequest) returns (PauseResponse);

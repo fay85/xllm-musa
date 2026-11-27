@@ -54,20 +54,6 @@ std::vector<std::string> xgrammar_unsupported_features(
   // constrained decode verification passed (1P1D on the production-aligned
   // Mooncake pin; the spec rides the KV first generation, the decode side
   // rebuilds through the machine cache and applies the FSM mask per token).
-  // PD OOC stays fail-closed: its scheduler does not populate the grammar
-  // fields on the allocation request yet, so a migrated request would lose
-  // its grammar.
-  if (inputs.enable_pd_ooc) {
-    unsupported.emplace_back("pd_ooc");
-  }
-  // Service routing uses the same serialized constraint snapshots as regular
-  // disagg PD. XGrammar snapshots carry the grammar identity and committed
-  // token history, so a receiving worker rebuilds the exact machine before
-  // applying the next mask instead of dropping or resetting the constraint.
-  //
-  // Prefix caching only reuses prompt KV. The response grammar starts at the
-  // first generated token, after prefill, so a cached prompt prefix does not
-  // advance or otherwise change the response matcher.
   return unsupported;
 }
 

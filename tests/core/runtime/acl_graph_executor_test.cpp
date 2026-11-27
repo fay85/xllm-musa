@@ -231,16 +231,11 @@ class SimpleCausalLM : public CausalLM {
         "pos_embedding",
         torch::randn({max_pos, args.hidden_size()},
                      torch::dtype(torch::kFloat32).device(device)));
-    // Initialize block-related tensors for Rec multi-round computation
     block_size_ = torch::tensor(4L, torch::dtype(torch::kInt64).device(device));
     scalar_one_ = torch::tensor(1L, torch::dtype(torch::kInt64).device(device));
 
     // Initialize scalar tensors for computation
     // const tensors
-    kv_scale_ =
-        torch::tensor(0.01f, torch::dtype(torch::kFloat32).device(device));
-    q_scale_ =
-        torch::tensor(0.01f, torch::dtype(torch::kFloat32).device(device));
     cache_scale_ =
         torch::tensor(0.005f, torch::dtype(torch::kFloat32).device(device));
     block_scale_ =
@@ -394,8 +389,6 @@ class SimpleCausalLM : public CausalLM {
   torch::Tensor pos_embedding_table_;
 
   // Pre-allocated constant scalar tensors for computation
-  torch::Tensor kv_scale_;
-  torch::Tensor q_scale_;
   torch::Tensor cache_scale_;
   torch::Tensor block_scale_;
   torch::Tensor block_size_;

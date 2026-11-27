@@ -85,10 +85,6 @@ class BlockManager {
     // executor thread, so leaves are wrapped in ConcurrentBlockManagerImpl when
     // this is set to make those mutations thread-safe against the scheduler.
     PROPERTY(bool, enable_host_offload) = false;
-    // xtensor (VMM) KV leaf parameters. When enable_xtensor is set, the KV leaf
-    // is an XTensorBlockManagerImpl instead of a flat BlockManagerImpl; these
-    // carry the construction args the spec builder needs.
-    PROPERTY(bool, enable_xtensor) = false;
     PROPERTY(int64_t, num_layers) = 0;
     PROPERTY(int64_t, slot_size) = 0;
     PROPERTY(std::string, model_id);
@@ -132,8 +128,7 @@ class BlockManager {
     return {};
   }
 
-  // Wrapper calls this after it owns the leaf. BlockManagerImpl and
-  // XTensorBlockManagerImpl route their own allocate calls through it.
+  // The wrapper owns the leaf and supplies its block allocator.
   virtual void set_block_allocator(BlockManager* /*allocator*/) {}
 
   // Returns the shared-prefix vector for the caller's Sequence. The vector's
@@ -212,7 +207,6 @@ class BlockManager {
   // Called with this alias still counted. refcount 2 and membership in the
   // prefix cache means the cache will be the only owner after the drop.
   // refcount 1 is the last alias and may return the id to the free list.
-  // XTensor has no prefix cache and recycles only the last alias.
   // The leaf then calls release_block_ref(), which calls dec_ref_count().
   virtual void free(Block* block) = 0;
 
@@ -245,13 +239,6 @@ class BlockManager {
   // `max_hit_tokens` is the common gate-derived logical boundary.
   virtual void trim_prefetch_blocks(Sequence* /*seq*/,
                                     size_t /*max_hit_tokens*/) {}
-
-  // Post-construction init hook: only the xtensor leaf needs it (KV tensors
-  // must be created on the worker before VMM physical pages can be mapped to
-  // reserve the padding block). Empty base default; the composite fans it out
-  // to every leaf, so non-xtensor leaves are a no-op. This keeps the
-  // out-of-band timing free of any dynamic_cast through the composite.
-  virtual void reserve_xtensor_padding_blocks() {}
 
  protected:
   // Drops the alias after free() has read the pre-drop refcount.

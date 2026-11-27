@@ -42,7 +42,6 @@ class ModelLoader {
   virtual std::unique_ptr<Tokenizer> tokenizer() const = 0;
   virtual std::vector<std::unique_ptr<StateDict>>& get_state_dicts() = 0;
   virtual std::string model_weights_path() const = 0;
-  virtual int64_t get_total_weight_size() const { return 0; }
 
   void set_reference_model_weights_path(const std::string& path) {
     reference_model_weights_path_ = path;
@@ -50,11 +49,6 @@ class ModelLoader {
   const std::string& reference_model_weights_path() const {
     return reference_model_weights_path_;
   }
-
-  // Returns the total byte size of non-decoder-layer weights
-  // (embed_tokens, norm, lm_head). Used by rolling load to size XTensor
-  // weight pages without including decoder layer weights.
-  virtual int64_t get_non_decoder_weight_size() const { return 0; }
 
   // Returns the maximum byte size among all decoder layers.
   // Return -1 if unsupported or failed to compute.

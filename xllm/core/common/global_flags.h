@@ -184,12 +184,8 @@ DECLARE_int32(max_vit_attention_units_per_chunk);
 
 DECLARE_string(master_node_addr);
 
-DECLARE_string(xtensor_master_node_addr);
-
 // --- disaggregated prefill and decode config ---
 DECLARE_bool(enable_disagg_pd);
-
-DECLARE_bool(enable_pd_ooc);
 
 DECLARE_int32(disagg_pd_port);
 
@@ -299,8 +295,6 @@ DECLARE_int32(max_global_tpot_ms);
 
 DECLARE_int32(max_requests_per_batch);
 
-DECLARE_bool(enable_xtensor);
-
 DECLARE_int64(phy_page_granularity_size);
 
 // --- load config ---
@@ -320,24 +314,7 @@ DECLARE_int32(beam_width);
 
 DECLARE_bool(enable_block_copy_kernel);
 
-DECLARE_bool(enable_topk_sorted);
-
-// --- rec config ---
-DECLARE_bool(enable_rec_fast_sampler);
-
-DECLARE_bool(enable_rec_prefill_only);
-
-DECLARE_bool(output_rec_logprobs);
-
-DECLARE_bool(enable_xattention_one_stage);
-
-DECLARE_int32(max_decode_rounds);
-
-DECLARE_bool(enable_constrained_decoding);
-
 DECLARE_int32(request_queue_size);
-
-DECLARE_uint32(rec_worker_max_concurrency);
 
 // --- qwen3 reranker config ---
 DECLARE_bool(enable_qwen3_reranker);
@@ -368,12 +345,6 @@ DECLARE_int64(dit_cache_n_derivatives);
 DECLARE_int64(dit_cache_skip_interval_steps);
 
 DECLARE_double(dit_cache_residual_diff_threshold);
-
-DECLARE_bool(enable_convert_tokens_to_item);
-DECLARE_bool(enable_output_sku_logprobs);
-DECLARE_bool(enable_extended_item_info);
-DECLARE_int32(each_conversion_threshold);
-DECLARE_int32(total_conversion_threshold);
 
 DECLARE_bool(enable_return_mm_full_embeddings);
 

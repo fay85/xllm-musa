@@ -72,9 +72,6 @@ class RemoteWorker : public WorkerClient {
                       const std::vector<uint16_t>& ports) override;
 
   // P2P link for weight transfer
-  bool link_p2p(const std::string& remote_addr) override;
-  bool unlink_p2p(const std::string& remote_addr) override;
-
   bool pull_kv_blocks(const uint64_t src_cluster_id,
                       const std::string& src_addr,
                       const std::vector<KVTransferMapping>& mappings) override;

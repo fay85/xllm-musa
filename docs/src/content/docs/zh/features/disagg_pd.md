@@ -101,15 +101,11 @@ ENABLE_DECODE_RESPONSE_TO_SERVICE=true ./xllm_master_serving --etcd_addr="127.0.
 `xllm_pd_request_queue_microseconds_count_role_prefill`、
 `xllm_pd_request_decode_microseconds_latency_role_decode`。它们是
 LatencyRecorder 的计数/延迟统计，不是 Prometheus `_bucket` histogram。
-这里的 `role` 表示实际计算阶段，而不是进程的 `instance_role` 配置。OOC 返回
-到配置为 Prefill 的进程后，恢复执行的 Decode 段仍标为 `decode`；不能仅按进程
-配置过滤该系列，也不能把它解读成某台 Decode 机器的累计指标。
+这里的 `role` 表示实际计算阶段，而不是进程的 `instance_role` 配置。
 P 的 Queue/Prefill 不会因在 D 导入而重复采样。P 阶段采样时已经取消/失败的请求
 不计入；已完成并采样的 P 阶段不会因后续 handoff/Decode 失败而撤回。D 仅采成功
 完成的本地段。未知边界和不支持的多输出/评分请求不作为完整阶段样本；没有新增
 本地 token 时不伪造零 Decode/TPOT。
-PD-OOC 返回会重置本地等待和 token 基线，D 指标仅描述最终成功完成所在的本地段，
-不是跨多个迁移段的累计耗时。
 这些角色本地阶段不能相加当作 PD 端到端延迟：D Queue 是 D Decode 的子区间，
 跨机传输也不在上述阶段中。
 

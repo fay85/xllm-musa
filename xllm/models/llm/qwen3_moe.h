@@ -21,7 +21,6 @@ limitations under the License.
 #include "core/layers/common/attention_mask.h"
 #endif
 #include "core/layers/qwen3_moe_decoder_layer.h"
-#include "core/util/rec_model_utils.h"
 #include "llm_model_base.h"
 
 namespace xllm {
@@ -132,41 +131,15 @@ class Qwen3MoeModelImpl : public LlmModelImplBase<layer::Qwen3MoeDecoderLayer> {
           apply_mrope(positions);
     }
 
-    const LlmRecMultiRoundParams* llmrec_params = nullptr;
-    if (is_rec_multi_round_mode() &&
-        modified_input_params.has_llmrec_params()) {
-      llmrec_params = modified_input_params.llmrec_params();
-      CHECK_EQ(llmrec_params->full_k_caches.size(), layers_.size())
-          << "Rec multi-round mode requires full_k_caches per layer.";
-      CHECK_EQ(llmrec_params->full_v_caches.size(), layers_.size())
-          << "Rec multi-round mode requires full_v_caches per layer.";
-      CHECK_EQ(llmrec_params->unshared_k_caches.size(), layers_.size())
-          << "Rec multi-round mode requires unshared_k_caches per layer.";
-      CHECK_EQ(llmrec_params->unshared_v_caches.size(), layers_.size())
-          << "Rec multi-round mode requires unshared_v_caches per layer.";
-    }
-
     std::optional<torch::Tensor> residual;
     for (size_t i = 0; i < layers_.size(); i++) {
       if (!modified_input_params.synchronize_layer(static_cast<uint32_t>(i))) {
         return ModelOutput();
       }
-      if (llmrec_params != nullptr) {
-        attn_metadata.full_k_cache = llmrec_params->full_k_caches[i];
-        attn_metadata.full_v_cache = llmrec_params->full_v_caches[i];
-        attn_metadata.unshared_k_cache = llmrec_params->unshared_k_caches[i];
-        attn_metadata.unshared_v_cache = llmrec_params->unshared_v_caches[i];
-      }
 #if defined(USE_CUDA)
       attn_metadata.plan_info->layer_id = i;
 #endif
 #if defined(USE_CUDA)
-      if (attn_metadata.shared_plan_info != nullptr) {
-        attn_metadata.shared_plan_info->layer_id = i;
-      }
-      if (attn_metadata.unshared_plan_info != nullptr) {
-        attn_metadata.unshared_plan_info->layer_id = i;
-      }
 #endif
       auto& layer = layers_[i];
       h = layer(h,

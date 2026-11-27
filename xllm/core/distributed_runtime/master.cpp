@@ -57,8 +57,6 @@ limitations under the License.
 #include "models/cp_capability.h"
 #include "models/model_registry.h"
 #include "platform/platform.h"
-#include "rec_engine.h"
-#include "rec_master.h"
 #include "runtime/options.h"
 #include "speculative_engine.h"
 #include "util/model_config_utils.h"
@@ -110,7 +108,6 @@ void apply_runtime_kv_cache_options(const Options& source,
   CHECK(!source.enable_kvcache_store() || source.host_blocks_factor() > 1.0)
       << "KV cache Store requires Host cache blocks (host_blocks_factor > 1).";
   destination.host_blocks_factor(source.host_blocks_factor())
-      .enable_pd_ooc(source.enable_pd_ooc())
       .enable_kvcache_store(source.enable_kvcache_store())
       .store_protocol(source.store_protocol())
       .store_rdma_devices(source.store_rdma_devices())
@@ -456,9 +453,7 @@ Master::Master(const Options& options, EngineType type)
         options_.expert_parallel_degree().value_or(0) <= 1 &&
         options_.is_local() && options_.rank_tablefile().value_or("").empty() &&
         options_.host_blocks_factor() <= 1.0 &&
-        !options_.enable_kvcache_store() &&
-        !KVCacheConfig::get_instance().enable_xtensor() &&
-        !options_.enable_disagg_pd() &&
+        !options_.enable_kvcache_store() && !options_.enable_disagg_pd() &&
         options_.instance_role() == InstanceRole::DEFAULT &&
         options_.draft_model_path().value_or("").empty() &&
         options_.num_speculative_tokens() == 0 &&
@@ -466,7 +461,7 @@ Master::Master(const Options& options, EngineType type)
         (model_type == "qwen3_5_text" || model_type == "qwen3_5_moe_text");
     CHECK(supported_runtime)
         << "Qwen3.5 DCP supports only replicated-GQA local NPU TORCH LLM "
-           "generation without CP, EP/EPLB, host/KVStore/XTensor offload, "
+           "generation without CP, EP/EPLB, host/KVStore offload, "
            "P/D, or "
            "speculative decoding, and requires enable_fia_decode=true";
   }
@@ -578,8 +573,6 @@ Master::Master(const Options& options, EngineType type)
       const auto transfer_mode_error =
           validate_vlm_speculative_pd_transfer_mode(options_, model_type);
       CHECK(!transfer_mode_error.has_value()) << transfer_mode_error.value();
-      CHECK(!options_.enable_pd_ooc())
-          << "VLM speculative decoding does not support PD OOC";
       CHECK(!options_.enable_service_routing() || supports_routing)
           << "VLM speculative service routing does not support model_type="
           << model_type << ", speculative_algorithm=" << algorithm
@@ -639,7 +632,6 @@ Master::Master(const Options& options, EngineType type)
         .kv_cache_transfer_mode(options_.kv_cache_transfer_mode())
         .transfer_listen_port(options_.transfer_listen_port())
         .enable_disagg_pd(options_.enable_disagg_pd())
-        .enable_pd_ooc(options_.enable_pd_ooc())
         .enable_service_routing(options_.enable_service_routing())
         .enable_schedule_overlap(options_.enable_schedule_overlap())
         .enable_offline_inference(options_.enable_offline_inference())
@@ -722,48 +714,6 @@ Master::Master(const Options& options, EngineType type)
     apply_runtime_kv_cache_options(options_, eng_options);
 
     engine_ = std::make_unique<LLMEngine>(eng_options);
-  } else if (type == EngineType::REC) {
-    options_.enable_schedule_overlap(false);
-    LOG(WARNING) << "Force to disable schedule overlap for REC model, not "
-                    "supported yet.";
-    runtime::Options eng_options;
-    eng_options.model_path(options_.model_path())
-        .devices(devices)
-        .backend(options_.backend())
-        .block_size(options_.block_size())
-        .max_cache_size(options_.max_cache_size())
-        .max_memory_utilization(options_.max_memory_utilization())
-        .enable_prefix_cache(options_.enable_prefix_cache())
-        .task_type(options_.task_type())
-        .npu_kernel_backend(options_.npu_kernel_backend())
-        .enable_mla(options_.enable_mla())
-        .enable_chunked_prefill(options_.enable_chunked_prefill())
-        .enable_offline_inference(options_.enable_offline_inference())
-        .disable_log_stats(options_.disable_log_stats())
-        .spawn_worker_path(options_.spawn_worker_path())
-        .enable_shm(options_.enable_shm())
-        .is_local(options_.is_local())
-        .enable_schedule_overlap(options_.enable_schedule_overlap())
-        .master_node_addr(options_.master_node_addr())
-        .nnodes(options_.nnodes())
-        .node_rank(options_.node_rank())
-        .dp_size(options_.dp_size())
-        .ep_size(options_.ep_size())
-        .cp_size(options_.cp_size())
-        .max_seqs_per_batch(options_.max_seqs_per_batch())
-        .beam_width(options_.beam_width())
-        .max_tokens_per_batch(options_.max_tokens_per_batch())
-        .enable_graph(options_.enable_graph())
-        .enable_graph_mode_decode_no_padding(
-            options_.enable_graph_mode_decode_no_padding())
-        .enable_prefill_piecewise_graph(
-            options_.enable_prefill_piecewise_graph())
-        .max_tokens_for_graph_mode(options_.max_tokens_for_graph_mode())
-        .max_tokens_per_chunk_for_prefill(
-            options_.max_tokens_per_chunk_for_prefill())
-        .rec_worker_max_concurrency(options_.rec_worker_max_concurrency());
-
-    engine_ = std::make_unique<RecEngine>(eng_options);
   } else if (type == EngineType::DIT) {
     // construct dit engine
     runtime::Options eng_options;
@@ -853,47 +803,10 @@ std::unique_ptr<Master> create_master(const std::string& backend,
   } else if (backend == "dit") {
     LOG(INFO) << "creating dit master";
     return std::make_unique<DiTMaster>(options);
-  } else if (backend == "rec") {
-    LOG(INFO) << "creating rec master";
-    return std::make_unique<RecMaster>(options);
   } else {
     LOG(FATAL) << "Failed to create master, backend is" << backend;
     return nullptr;
   }
 }
 
-std::unique_ptr<Master> fork_master(Master* master, const Options& options) {
-  // sleep/wakeup/fork_master requires --enable_xtensor=true
-  if (!::xllm::KVCacheConfig::get_instance().enable_xtensor()) {
-    LOG(WARNING) << "fork_master requires xtensor to be enabled";
-    return nullptr;
-  }
-
-  static uint64_t server_idx = 1;
-  CHECK(master != nullptr);
-
-  Options new_options = master->options();
-
-  if (!options.model_id().empty()) {
-    new_options.model_id() = options.model_id();
-  }
-  if (!options.model_path().empty()) {
-    new_options.model_path() = options.model_path();
-  }
-  new_options.master_node_addr() = options.master_node_addr();
-  new_options.server_idx() = server_idx++;
-  new_options.master_status() = options.master_status();
-  // Set nnodes and dp_size from fork request (tp_size * dp_size = nnodes)
-  if (options.nnodes() > 0 && new_options.nnodes() >= options.nnodes()) {
-    new_options.nnodes() = options.nnodes();
-  }
-  if (options.dp_size() > 0 && new_options.dp_size() >= options.nnodes()) {
-    new_options.dp_size() = options.dp_size();
-  }
-  std::unique_ptr<Master> new_master =
-      create_master(new_options.backend(), new_options);
-  new_master->run();
-
-  return new_master;
-}
 }  // namespace xllm

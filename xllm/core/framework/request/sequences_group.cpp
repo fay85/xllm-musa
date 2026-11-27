@@ -20,8 +20,6 @@ limitations under the License.
 #include <unordered_set>
 
 #include "common/global_flags.h"
-#include "core/framework/config/rec_config.h"
-#include "core/util/rec_model_utils.h"
 #include "framework/batch/beam_search.h"
 #include "util/blocking_counter.h"
 #include "util/slice.h"
@@ -127,16 +125,6 @@ void SequencesGroup::generate_outputs(std::vector<SequenceOutput>& outputs,
     return;
   }
 
-  // Check for multi-round beam search results
-  if (is_rec_multi_round_mode() && check_beam_search() &&
-      sequences_.size() == 1) {
-    auto* base = sequences_[0].get();
-    if (base->has_beam_result()) {
-      generate_multi_round_output(outputs, tokenizer, *base);
-      return;
-    }
-  }
-
   if (sequence_params_.streaming) {
     for (auto& seq : sequences_) {
       outputs.push_back(std::move(seq->generate_output()));
@@ -225,7 +213,7 @@ void SequencesGroup::generate_outputs_parallel(
   }
 }
 
-void SequencesGroup::process_beam_search(bool force_requested_result_size) {
+void SequencesGroup::process_beam_search() {
   if (!check_beam_search()) {
     return;
   }
@@ -235,12 +223,6 @@ void SequencesGroup::process_beam_search(bool force_requested_result_size) {
   }
 
   const size_t beam_width = sequence_params_.sampling_param->beam_width;
-  const int32_t requested_num_return_sequences =
-      sequence_params_.sampling_param->num_return_sequences > 0
-          ? sequence_params_.sampling_param->num_return_sequences
-          : sequence_params_.sampling_param->beam_width;
-  const size_t requested_result_size =
-      static_cast<size_t>(requested_num_return_sequences);
   const size_t topk =
       std::max<size_t>(1, sequence_params_.sampling_param->top_logprobs);
 
@@ -285,9 +267,7 @@ void SequencesGroup::process_beam_search(bool force_requested_result_size) {
     build_source_info(sequences_[seq_index].get());
   }
 
-  const size_t target_result_size =
-      force_requested_result_size ? requested_result_size : beam_width;
-  SimpleTopKOptimizerBeamCandidate topk_optimizer(target_result_size);
+  SimpleTopKOptimizerBeamCandidate topk_optimizer(beam_width);
   auto add_self_candidate = [&](size_t seq_index, Sequence* seq) {
     BeamCandidate candidate;
     candidate.source_index = seq_index;
@@ -350,7 +330,7 @@ void SequencesGroup::process_beam_search(bool force_requested_result_size) {
     return;
   }
 
-  const size_t result_size = std::min(target_result_size, candidates.size());
+  const size_t result_size = std::min(beam_width, candidates.size());
   CHECK(!sequences_.empty());
 
   const size_t existing_size = sequences_.size();
@@ -445,57 +425,6 @@ void SequencesGroup::process_beam_search(bool force_requested_result_size) {
 
   if (sequences_.size() > result_size) {
     sequences_.resize(result_size);
-  }
-}
-
-void SequencesGroup::finish() {
-  for (auto& sequence : sequences_) {
-    sequence->finish();
-  }
-}
-
-void SequencesGroup::generate_multi_round_output(
-    std::vector<SequenceOutput>& outputs,
-    const Tokenizer& tokenizer,
-    const Sequence& base) {
-  size_t bw = static_cast<size_t>(base.beam_width_cached());
-  const auto& last_lps = base.beam_last_logprobs();
-
-  // Rank by logprob
-  std::vector<std::pair<float, size_t>> rank;
-  rank.reserve(bw);
-  for (size_t b = 0; b < bw; ++b) {
-    float lp = (b < last_lps.size()) ? last_lps[b] : 0.0f;
-    rank.emplace_back(lp, b);
-  }
-  std::sort(rank.begin(), rank.end(), [](const auto& l, const auto& r) {
-    return l.first > r.first;
-  });
-
-  const auto& flat2d = base.beam_seq_group_flat();
-  size_t rounds = static_cast<size_t>(base.total_rounds_cached());
-  outputs.reserve(bw);
-
-  for (size_t i = 0; i < bw; ++i) {
-    size_t b = rank[i].second;
-    std::vector<int32_t> gen_ids(flat2d[b].begin(), flat2d[b].end());
-
-    SequenceOutput out;
-    out.index = i;
-    out.text = tokenizer.decode(Slice<int32_t>{gen_ids.data(), gen_ids.size()},
-                                sequence_params_.skip_special_tokens);
-    out.token_ids = std::move(gen_ids);
-    out.generated_token_count = out.token_ids.size();
-    std::vector<LogProb> log_probs;
-    log_probs.resize(1);
-    log_probs[0].logprob = rank[i].first;
-    out.logprobs = log_probs;
-
-    auto fr = base.finish_reason().to_string();
-    if (fr.has_value()) {
-      out.finish_reason = fr.value();
-    }
-    outputs.push_back(std::move(out));
   }
 }
 

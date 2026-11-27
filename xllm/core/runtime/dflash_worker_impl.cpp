@@ -470,15 +470,14 @@ void DFlashWorkerImpl::on_draft_model_loaded(
 #if defined(USE_NPU)
     // The graph requirement guards the decode-side spec-verify replay, so it
     // is exempt only for an instance that never receives a decode batch:
-    // is_pd_prefill_only() rather than a bare role comparison. The role flag
+    // is_pd_prefill_role() rather than a bare role comparison. The role flag
     // alone is not enough -- without enable_disagg_pd the continuous
     // scheduler still schedules decode on an instance whose role says
-    // PREFILL, and under enable_pd_ooc the PD prefill instance decodes its
-    // offline requests -- either case would silently run the eager
-    // validation this CHECK rejects instead of aborting at startup. Note the
-    // exemption cannot lean on graph warmup: no warmup runs at all when
-    // enable_graph=false, which is the only configuration this CHECK fails.
-    CHECK(!target_is_hybrid_recurrent_ || is_pd_prefill_only(options_) ||
+    // PREFILL, which would silently run the eager validation this CHECK
+    // rejects instead of aborting at startup. Note the exemption cannot lean
+    // on graph warmup: no warmup runs at all when enable_graph=false, which
+    // is the only configuration this CHECK fails.
+    CHECK(!target_is_hybrid_recurrent_ || is_pd_prefill_role(options_) ||
           ::xllm::ExecutionConfig::get_instance().enable_graph())
         << "DFlash2 with a hybrid recurrent target requires ACL Graph: the "
            "expanded spec-verify replay path preserves the accepted GDN "
@@ -732,7 +731,7 @@ std::optional<ForwardOutput> DFlashWorkerImpl::step_prefill(
 
   const bool target_prefill_failed =
       !embeddings.defined() && !output.failed_request_ids.empty();
-  if (!target_prefill_failed && !is_pd_prefill_only(options_) &&
+  if (!target_prefill_failed && !is_pd_prefill_role(options_) &&
       input.sampling_params.selected_token_idxes.defined()) {
     const auto& embedding_ids = input.input_params.embedding.embedding_ids;
     torch::Tensor bootstrap_embeddings = embeddings;

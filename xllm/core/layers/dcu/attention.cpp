@@ -18,7 +18,6 @@ limitations under the License.
 #include <cstdlib>
 #include <cstring>
 
-#include "core/util/rec_model_utils.h"
 #include "layers/dcu/base_attention_impl.h"
 #include "layers/dcu/flash_attention.h"
 #include "layers/dcu/torch_attention.h"
@@ -34,8 +33,7 @@ AttentionImpl::AttentionImpl(int64_t num_heads,
   // pointer to manage different implementations.
   VLOG(1) << "## scale " << scale << " num_heads " << num_heads << " head_size "
           << head_size << " num_kv_heads " << num_kv_heads << " sliding_window "
-          << sliding_window << " is_rec_multi_round_mode "
-          << is_rec_multi_round_mode();
+          << sliding_window;
 
   // Debug switch: set XLLM_DCU_ATTN_IMPL=torch to fall back to the pure-PyTorch
   // implementation (TorchAttentionImpl) instead of the default FlashAttention
@@ -65,29 +63,16 @@ std::tuple<torch::Tensor, std::optional<torch::Tensor>> AttentionImpl::forward(
           << attn_metadata.enable_cuda_graph;
 
   if (!attn_metadata.enable_cuda_graph) {
-    VLOG(1)
-        << "AttentionImpl::forward"
-        << " is_prefill=" << attn_metadata.is_prefill
-        << " batch_size=" << (attn_metadata.kv_cu_seq_lens.size(0) - 1)
-        << " max_seq_len=" << attn_metadata.max_seq_len
-        << " max_query_len=" << attn_metadata.max_query_len
-        << " q_shape=" << query.sizes() << " k_shape=" << key.sizes()
-        << " v_shape=" << value.sizes() << " output_shape=" << output.sizes()
-        << " kv_cache k_cache=" << kv_cache.get_k_cache().sizes()
-        << " kv_cache v_cache=" << kv_cache.get_v_cache().sizes()
-        << " full_k_cache size =" << attn_metadata.full_k_cache.sizes()
-        << " full_v_cache=" << attn_metadata.full_v_cache.sizes()
-        << " unshared_k_cache size =" << attn_metadata.unshared_k_cache.sizes()
-        << " unshared_v_cache size =" << attn_metadata.unshared_v_cache.sizes()
-        << " q_cu_seq_lens=" << attn_metadata.q_cu_seq_lens
-        << " kv_cu_seq_lens=" << attn_metadata.kv_cu_seq_lens
-        << " block_table=" << attn_metadata.block_table.sizes()
-        << " paged_kv_indptr size =" << attn_metadata.paged_kv_indptr.sizes()
-        << " paged_kv_indices size =" << attn_metadata.paged_kv_indices.sizes()
-        << " paged_kv_last_page_len=" << attn_metadata.paged_kv_last_page_len
-        << " slot_mapping size =" << attn_metadata.slot_mapping.sizes()
-        << " q_seq_lens=" << attn_metadata.q_seq_lens
-        << " kv_seq_lens=" << attn_metadata.kv_seq_lens;
+    VLOG(1) << "AttentionImpl::forward"
+            << " is_prefill=" << attn_metadata.is_prefill
+            << " batch_size=" << (attn_metadata.kv_cu_seq_lens.size(0) - 1)
+            << " max_seq_len=" << attn_metadata.max_seq_len
+            << " max_query_len=" << attn_metadata.max_query_len
+            << " q_shape=" << query.sizes() << " k_shape=" << key.sizes()
+            << " v_shape=" << value.sizes()
+            << " output_shape=" << output.sizes()
+            << " kv_cache k_cache=" << kv_cache.get_k_cache().sizes()
+            << " kv_cache v_cache=" << kv_cache.get_v_cache().sizes();
   } else {
     // CUDA graph capture mode: cannot call tensor methods (sizes(), defined(),
     // numel()) but can print scalar fields and tensor objects directly

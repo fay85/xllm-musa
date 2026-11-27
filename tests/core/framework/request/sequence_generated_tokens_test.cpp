@@ -101,7 +101,6 @@ Sequence make_decode_ready_sequence(bool enable_schedule_overlap,
   params.skip_special_tokens = true;
   params.streaming = false;
   params.enable_schedule_overlap = enable_schedule_overlap;
-  params.rec_type = RecType::kNone;
   params.bos_token_id = 0;
   params.request_id = "generated_tokens_req";
   params.adapter_id = adapter_id;
@@ -271,23 +270,6 @@ TEST(RequestTimingIntegrationTest, MultiSequenceEndsAfterLastSequence) {
   const auto snapshot = request->state().timing->snapshot();
   EXPECT_TRUE(snapshot.terminal);
   EXPECT_TRUE(snapshot.decode_time.valid);
-}
-
-TEST(RequestTimingIntegrationTest, CachedBeamRoundsCannotClaimCompleteDecode) {
-  auto request = make_usage_request(/*max_tokens=*/4, /*overlap=*/false);
-  Sequence& sequence = *request->sequences().front();
-  sequence.append_token(Token(65));
-  request->state().timing->record_core_output(RequestTiming::Clock::now());
-  sequence.set_beam_result(/*bw=*/2,
-                           /*total_rounds=*/3,
-                           {{65, 66, 67}, {65, 68, 69}},
-                           {-1.0F, -2.0F});
-  request->state().timing->update_from_finished_request(
-      /*generation_complete=*/true);
-  const auto snapshot = request->state().timing->snapshot();
-  EXPECT_FALSE(snapshot.decode_time.valid);
-  EXPECT_TRUE(snapshot.decode_time.partial);
-  EXPECT_EQ(snapshot.decode_time.reason, RequestTimingReason::UNKNOWN_BOUNDARY);
 }
 
 }  // namespace

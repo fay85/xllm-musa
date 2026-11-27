@@ -33,7 +33,6 @@ limitations under the License.
 #include "core/framework/kv_cache/kv_cache_utils.h"
 #include "core/framework/model/aux_hidden_capture.h"
 #include "core/framework/model/mtp_utils.h"
-#include "core/framework/model/rec_causal_lm.h"
 #include "core/platform/device.h"
 #include "core/platform/platform.h"
 #include "core/runtime/options.h"
@@ -50,51 +49,6 @@ limitations under the License.
 namespace xllm {
 
 namespace {
-
-class DummyRecCausalLM final : public RecCausalLM {
- public:
-  explicit DummyRecCausalLM(const torch::TensorOptions& options)
-      : options_(options) {}
-
-  ModelOutput forward(const torch::Tensor& tokens,
-                      const torch::Tensor& positions,
-                      std::vector<KVCache>& kv_caches,
-                      const ModelInputParams& parameters) override {
-    UNUSED_PARAMETER(tokens);
-    UNUSED_PARAMETER(positions);
-    UNUSED_PARAMETER(kv_caches);
-    UNUSED_PARAMETER(parameters);
-    return ModelOutput();
-  }
-
-  torch::Tensor logits(const torch::Tensor& hidden_states,
-                       const torch::Tensor& seleted_idxes) override {
-    UNUSED_PARAMETER(hidden_states);
-    UNUSED_PARAMETER(seleted_idxes);
-    return torch::Tensor();
-  }
-
-  void load_model(std::unique_ptr<ModelLoader> loader) override {
-    UNUSED_PARAMETER(loader);
-  }
-
-  torch::Device device() const override { return options_.device(); }
-
-  void prepare_expert_weight(int32_t layer_id,
-                             const std::vector<int32_t>& expert_ids) override {
-    UNUSED_PARAMETER(layer_id);
-    UNUSED_PARAMETER(expert_ids);
-  }
-
-  void update_expert_weight(int32_t layer_id) override {
-    UNUSED_PARAMETER(layer_id);
-  }
-
-  const torch::TensorOptions& options() const override { return options_; }
-
- private:
-  torch::TensorOptions options_;
-};
 
 #if defined(USE_MLU)
 // Keep real MTP checkpoint slicing; replace only the large decoder body with
@@ -411,36 +365,6 @@ TEST(HFModelLoaderTest, KeepLegacyFp8ConfigUnchanged) {
   ASSERT_TRUE(load_quant_cfg(reader, quant_args));
   EXPECT_EQ(quant_args.quant_method(), kQuantMethodFp8);
   EXPECT_FALSE(quant_args.activation_dynamic());
-}
-
-TEST(HFModelLoaderTest, RecFactoryCreatesRecCausalLmInstance) {
-  EXPECT_FALSE(static_cast<bool>(ModelRegistry::get_rec_model_factory(
-      "rec_causallm_missing_contract_test")));
-  static std::atomic<int64_t> factory_sequence{0};
-  const std::string kFactoryName =
-      "rec_causallm_instance_contract_test_" +
-      std::to_string(factory_sequence.fetch_add(1));
-  auto calls = std::make_shared<int32_t>(0);
-  ModelRegistry::register_rec_model_factory(
-      kFactoryName,
-      [calls](const ModelContext& context) -> std::unique_ptr<RecCausalLM> {
-        UNUSED_PARAMETER(context);
-        ++*calls;
-        const torch::TensorOptions options =
-            torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU);
-        return std::make_unique<DummyRecCausalLM>(options);
-      });
-
-  RecModelFactory factory = ModelRegistry::get_rec_model_factory(kFactoryName);
-  ASSERT_TRUE(static_cast<bool>(factory));
-  EXPECT_EQ(ModelRegistry::get_model_backend(kFactoryName), "rec");
-
-  ModelContext context;
-  std::unique_ptr<RecCausalLM> rec_model = factory(context);
-  ASSERT_NE(rec_model, nullptr);
-
-  EXPECT_EQ(*calls, 1);
-  EXPECT_NE(dynamic_cast<DummyRecCausalLM*>(rec_model.get()), nullptr);
 }
 
 #if defined(USE_NPU) || defined(USE_MLU)

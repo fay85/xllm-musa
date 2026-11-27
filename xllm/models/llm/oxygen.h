@@ -68,13 +68,6 @@ class OxygenModelImpl : public QWen3ModelImpl {
 
     std::optional<torch::Tensor> residual;
     for (size_t i = 0; i < layers_.size(); i++) {
-      if (is_rec_multi_round_mode() && input_params_new.has_llmrec_params()) {
-        const auto& llmrec_params = input_params_new.llmrec_params();
-        attn_metadata.full_k_cache = llmrec_params->full_k_caches[i];
-        attn_metadata.full_v_cache = llmrec_params->full_v_caches[i];
-        attn_metadata.unshared_k_cache = llmrec_params->unshared_k_caches[i];
-        attn_metadata.unshared_v_cache = llmrec_params->unshared_v_caches[i];
-      }
       auto& layer = layers_[i];
       h = layer(h,
                 residual,

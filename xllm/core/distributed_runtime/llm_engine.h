@@ -111,11 +111,6 @@ class LLMEngine : public Engine {
                       const int32_t src_dp_size,
                       const int32_t src_kv_split_size = 1) override;
 
-  // P2P link for weight transfer - each worker links to one remote addr
-  bool link_p2p(const std::vector<std::string>& remote_addrs) override;
-
-  bool unlink_p2p(const std::vector<std::string>& remote_addrs) override;
-
   std::shared_ptr<DistManager> get_dist_manager() { return dist_manager_; };
 
   bool sleep(MasterStatus master_status) override;
@@ -136,24 +131,10 @@ class LLMEngine : public Engine {
 
   bool stop_profile() override;
 
-  // XTensor mode: get GlobalXTensor offsets for allocated blocks via RPC
-  // Calls worker in the specified DP group to compute offsets
-  bool get_xtensor_offsets_for_blocks(
-      int32_t dp_rank,
-      const std::vector<int32_t>& block_ids,
-      std::vector<std::pair<std::vector<uint64_t>, std::vector<uint64_t>>>&
-          layer_offsets) override;
-
  private:
-  // ---- RL deep-sleep path (SleepableAllocator), isolated from the xtensor
-  // ---- (PageAllocator) sleep/wakeup path. ----
-  // True when the engine uses the RL SleepableAllocator path (enable_sleep_mode
-  // with xtensor disabled) rather than the xtensor PageAllocator path.
-  bool rl_sleep_mode() const;
+  // RL deep sleep uses the VMM-backed SleepableAllocator.
   bool rl_sleep(MasterStatus master_status);
   bool rl_wakeup(const WakeupOptions& options);
-  bool xtensor_sleep(MasterStatus master_status);
-  bool xtensor_wakeup(const WakeupOptions& options);
 
   template <typename TargetEngine>
   friend class SpeculativeEngineBase;
@@ -161,8 +142,6 @@ class LLMEngine : public Engine {
   void setup_workers(const runtime::Options& options);
   bool init_model(MasterStatus master_status = MasterStatus::WAKEUP);
   void init_eplb_manager();
-  int64_t get_effective_xtensor_weight_size(
-      const ModelLoader& model_loader) const;
   KVCacheCapacity estimate_kv_cache_capacity();
   bool allocate_kv_cache(const KVCacheCapacity& kv_cache_cap);
   std::vector<ForwardInput> prepare_inputs(std::vector<Batch>& batch);

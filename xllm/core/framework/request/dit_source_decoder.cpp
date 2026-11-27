@@ -15,6 +15,8 @@ limitations under the License.
 
 #include "framework/request/dit_source_decoder.h"
 
+#include <glog/logging.h>
+
 #include <cstdint>
 #include <optional>
 #include <string_view>
@@ -27,6 +29,44 @@ limitations under the License.
 #include "core/util/timer.h"
 
 namespace xllm {
+
+std::optional<TensorParameters> proto_to_tensor_parameters(
+    const proto::Tensor& proto_tensor) {
+  TensorParameters parameters;
+  for (const auto& [name, proto_parameter] : proto_tensor.parameters()) {
+    if (name == "is_binary" || name == "offset" || name == "len") {
+      continue;
+    }
+    const int32_t value_count =
+        static_cast<int32_t>(proto_parameter.has_bool_param()) +
+        static_cast<int32_t>(proto_parameter.has_int64_param()) +
+        static_cast<int32_t>(proto_parameter.has_string_param()) +
+        static_cast<int32_t>(proto_parameter.has_double_param()) +
+        static_cast<int32_t>(proto_parameter.has_uint64_param()) +
+        static_cast<int32_t>(proto_parameter.int64_tensor_param_size() > 0);
+    if (value_count != 1) {
+      LOG(ERROR) << "Tensor parameter must contain exactly one value: " << name;
+      return std::nullopt;
+    }
+    if (proto_parameter.has_bool_param()) {
+      parameters.emplace(name, proto_parameter.bool_param());
+    } else if (proto_parameter.has_int64_param()) {
+      parameters.emplace(name, proto_parameter.int64_param());
+    } else if (proto_parameter.has_string_param()) {
+      parameters.emplace(name, proto_parameter.string_param());
+    } else if (proto_parameter.has_double_param()) {
+      parameters.emplace(name, proto_parameter.double_param());
+    } else if (proto_parameter.has_uint64_param()) {
+      parameters.emplace(name, proto_parameter.uint64_param());
+    } else {
+      parameters.emplace(
+          name,
+          std::vector<int64_t>(proto_parameter.int64_tensor_param().begin(),
+                               proto_parameter.int64_tensor_param().end()));
+    }
+  }
+  return parameters;
+}
 
 DiTSourceDecoder::DiTSourceDecoder(const BinaryPayload& request_payload,
                                    bool preserve_image_alpha)

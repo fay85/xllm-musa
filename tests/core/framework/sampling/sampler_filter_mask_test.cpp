@@ -24,7 +24,6 @@ limitations under the License.
 #include "core/framework/constraint/xgrammar_machine.h"
 #include "core/framework/sampling/json_object_grammar.h"
 #include "core/framework/sampling/logits_processor.h"
-#include "core/framework/sampling/rec_sampler.h"
 #include "core/framework/sampling/sampler.h"
 #include "core/framework/sampling/xgrammar_constraint.h"
 #include "platform/platform.h"
@@ -437,47 +436,6 @@ TEST(SamplerFilterMaskTest, DenseProcessorReturnsSelectedRows) {
   torch::Tensor logits = torch::tensor({{1.F, 2.F}, {3.F, 4.F}, {5.F, 6.F}});
   const torch::Tensor scores = process_logits(logits, params);
   EXPECT_TRUE(torch::equal(scores, torch::tensor({{-5.F, 6.F}, {1.F, -8.F}})));
-}
-
-TEST(SamplerFilterMaskTest, OneRecPublishesFullAndSubsetRows) {
-  const torch::Device device(torch::kCPU);
-  const float neg_inf = -std::numeric_limits<float>::infinity();
-  for (bool subset : {false, true}) {
-    for (torch::ScalarType dtype : {torch::kFloat32, torch::kBFloat16}) {
-      SamplingParameters params = make_greedy_params(/*batch_size=*/3);
-
-      params.sampling_mode = SamplingMode::RANDOM;
-      params.use_beam_search = true;
-      params.logprobs = true;
-      params.max_top_logprobs = 1;
-      params.sample_idxes = subset ? torch::tensor({2, 0}, torch::kLong)
-                                   : torch::arange(3, torch::kLong);
-      params.do_sample =
-          torch::ones({params.sample_idxes.numel()}, torch::kBool);
-      params = params.to(device, torch::kFloat32);
-      torch::Tensor logits =
-          torch::tensor({{10.F, 0.F}, {0.F, 10.F}, {0.F, 10.F}})
-              .to(device, dtype);
-      const torch::Tensor mask =
-          torch::tensor({{0.F, neg_inf}, {neg_inf, 0.F}, {neg_inf, 0.F}})
-              .index_select(/*dim=*/0, params.sample_idxes);
-      const SampleOutput output = RecSampler(RecPipelineType::kOneRecDefault)
-                                      .forward(logits, params, mask);
-      const torch::Tensor expected_logits =
-          subset
-              ? torch::tensor({{10.F, neg_inf}, {0.F, 10.F}, {neg_inf, 10.F}})
-              : torch::tensor(
-                    {{10.F, neg_inf}, {neg_inf, 10.F}, {neg_inf, 10.F}});
-      const auto expected_tokens =
-          subset
-              ? torch::tensor(/*values=*/{1, 0}, /*options=*/torch::kLong)
-              : torch::tensor(/*values=*/{0, 1, 1}, /*options=*/torch::kLong);
-      EXPECT_TRUE(
-          torch::equal(logits, expected_logits.to(logits.scalar_type())));
-      EXPECT_TRUE(torch::equal(output.top_tokens.select(/*dim=*/1, /*index=*/0),
-                               expected_tokens));
-    }
-  }
 }
 
 void check_request_filters(int64_t top_k,

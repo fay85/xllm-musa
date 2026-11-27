@@ -125,8 +125,8 @@ TEST(RequestTimingTest, SharedOutputSignalsAndPdRestoreAreIdempotent) {
   EXPECT_TRUE(timing.has_observed_token());
   EXPECT_FALSE(timing.has_generated_token());
   EXPECT_FALSE(timing.snapshot().pd_handoff_accepted);
-  // OOC keeps the ingress observation but cannot claim a complete PD TTFT
-  // on an imported role visit or join its old and new generation spans.
+  // An import preserves the ingress observation without combining the spans
+  // from before and after the handoff.
   EXPECT_EQ(timing.snapshot().server_ttft.milliseconds, 80.0);
   EXPECT_FALSE(timing.snapshot().server_ttft.valid);
   EXPECT_FALSE(timing.snapshot().decode_time.milliseconds.has_value());
