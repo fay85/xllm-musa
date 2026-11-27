@@ -185,7 +185,6 @@ torch::Tensor ChunkGatedDeltaRuleImpl::chunk_local_cumsum(
   auto queue = torch_mlu::getCurMLUStream();
   auto dim = compute_grid_dim(chunk_num);
 
-  // cumsum.py: *fp32, *fp32, *i32, *i32, i32, i32, [H], 64, i32, i32, 0, 1, 0
   triton_jit::JITKernel::get(
       /*py_path=*/"torch_mlu_ops.triton.fla.cumsum",
       /*fn_name=*/"tmo_chunk_local_cumsum_scalar_kernel")
@@ -194,6 +193,7 @@ torch::Tensor ChunkGatedDeltaRuleImpl::chunk_local_cumsum(
               /*cfg=*/{/*num_warps=*/1, /*num_stages=*/1},
               g,
               output,
+              /*scale=*/1.0f,
               cu_seqlens,
               chunk_indices,
               static_cast<int32_t>(T),
@@ -202,9 +202,10 @@ torch::Tensor ChunkGatedDeltaRuleImpl::chunk_local_cumsum(
               /*BT=*/64,
               static_cast<int32_t>(NT),
               static_cast<int32_t>(chunk_num),
-              /*flags=*/0,
-              1,
-              0);
+              /*REVERSE=*/reverse,
+              /*HAS_SCALE=*/false,
+              /*IS_VARLEN=*/cu_seqlens.numel() > 0,
+              /*HEAD_FIRST=*/head_first);
   return output;
 }
 
@@ -416,6 +417,7 @@ ChunkGatedDeltaRuleImpl::chunk_gated_delta_rule_fwd_h(
               opt_tensor(final_state),
               cu_seqlens,
               opt_tensor(chunk_offsets),
+              /*use_exp2=*/false,
               static_cast<int32_t>(T),
               static_cast<int32_t>(B),
               static_cast<int32_t>(num_v_heads_),
@@ -432,7 +434,8 @@ ChunkGatedDeltaRuleImpl::chunk_gated_delta_rule_fwd_h(
               /*SAVE_NEW_VALUE=*/save_new_value_flag,
               /*IS_VARLEN=*/is_varlen,
               /*ALLOW_TF32=*/1,
-              /*STATE_V_FIRST=*/1);
+              /*STATE_V_FIRST=*/1,
+              /*USE_EXP2=*/false);
   return std::make_tuple(h, v_new, final_state);
 }
 

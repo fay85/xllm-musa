@@ -47,7 +47,7 @@ constexpr int64_t kCompressRatio = 4;
 
 struct TestConfig {
   int64_t dim = 32;
-  int64_t q_lora_rank = 32;
+  int64_t q_lora_rank = 64;
   int64_t index_n_heads = 64;
   int64_t index_head_dim = 128;
   int64_t rope_head_dim = 64;

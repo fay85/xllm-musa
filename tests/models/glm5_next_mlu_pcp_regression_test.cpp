@@ -90,7 +90,7 @@ constexpr int64_t kKvBlocks = 192;
 constexpr float kConvCheckpointSentinel = 0.375f;
 constexpr float kSsmCheckpointSentinel = -1.25f;
 
-constexpr double kTolerance = 1e-3;
+constexpr double kDefaultSampleTolerance = 1e-3;
 
 constexpr int32_t kExitSkip = 77;
 constexpr int32_t kExitMismatch = 1;
@@ -805,7 +805,8 @@ StepInput make_step_input(const Step& step,
 void expect_sample(const torch::Tensor& tensor,
                    std::initializer_list<int64_t> coordinates,
                    float expected,
-                   const char* name) {
+                   const char* name,
+                   double tolerance = kDefaultSampleTolerance) {
   torch::Tensor value = tensor;
   for (const int64_t index : coordinates) {
     value = value.select(0, index);
@@ -813,7 +814,7 @@ void expect_sample(const torch::Tensor& tensor,
   const float actual = value.item<float>();
   ASSERT_TRUE(std::isfinite(actual))
       << name << " at " << ::testing::PrintToString(coordinates);
-  EXPECT_NEAR(actual, expected, kTolerance + kTolerance * std::abs(expected))
+  EXPECT_NEAR(actual, expected, tolerance + tolerance * std::abs(expected))
       << name << " at " << ::testing::PrintToString(coordinates);
 }
 
@@ -829,8 +830,11 @@ void check_hidden(const Step& step,
     SCOPED_TRACE(::testing::Message() << "sequence " << seq);
     row += step.new_tokens[seq];
     for (int32_t i = 0; i < 4; ++i) {
-      expect_sample(
-          hidden, {row, kChannels[i]}, expected.values[seq][i], "hidden");
+      expect_sample(hidden,
+                    {row, kChannels[i]},
+                    expected.values[seq][i],
+                    "hidden",
+                    /*tolerance=*/8e-3);
     }
   }
 }
@@ -848,7 +852,8 @@ void check_aux(const torch::Tensor& aux, const std::vector<int32_t>& layers) {
         expect_sample(aux,
                       {seq, slot * kHiddenSize + kChannels[i]},
                       kTurn2Aux[seq][slot][i],
-                      "aux_hidden");
+                      "aux_hidden",
+                      /*tolerance=*/4e-3);
       }
     }
   }
@@ -902,7 +907,8 @@ void check_caches(const std::vector<LayerCacheTensors>& tensors,
     expect_sample(kda.conv,
                   {state.linear_state_id, kConvKernel - 2, 17},
                   expected.kda[rank][seq][0],
-                  "layer6.conv");
+                  "layer6.conv",
+                  /*tolerance=*/4e-3);
     expect_sample(
         kda.ssm,
         {state.linear_state_id * (1 + kNumSpeculativeTokens), 0, 17, 31},

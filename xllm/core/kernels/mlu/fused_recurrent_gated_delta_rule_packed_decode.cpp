@@ -99,7 +99,12 @@ fused_recurrent_gated_delta_rule_packed_decode(
   if (split_hv) {
     block_hv = 1;
   }
-  int32_t block_v = (split_hv && B * HV < core_count) ? 64 : 128;
+  // A 128x128 state tile with three pipeline stages exceeds the MLU590's
+  // per-core NRAM budget on the non-split path. Tile V in halves there.
+  const bool limit_v_tile_for_nram =
+      !is_arch6 && !split_hv && K == 128 && V == 128;
+  int32_t block_v =
+      (limit_v_tile_for_nram || (split_hv && B * HV < core_count)) ? 64 : 128;
 
   // Validate the actually-launched block_hv (after the split_hv override). The
   // two paths constrain BLOCK_HV differently:

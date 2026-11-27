@@ -18,7 +18,6 @@ limitations under the License.
 #include <gtest/gtest.h>
 #include <torch/torch.h>
 
-#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <utility>
@@ -965,10 +964,19 @@ TEST(KVCacheEstimationTest,
   const KVCacheCapacity capacity =
       estimate_kv_cache_capacity(model_args, options);
 
-  // One logical KV checkpoint needs span / SWA block size rows. The fair
-  // budget funds eight burst blocks; NPU V4 needs sixteen for publication.
-  const int64_t publish_blocks = kDsv4NpuBlockSize / 128;
-  EXPECT_EQ(capacity.swa_count(), 18 + std::max<int64_t>(8, publish_blocks));
+  // The fair budget funds eight SWA blocks. A checkpoint can require more,
+  // depending on the platform's logical KV block size.
+  switch (capacity.block_size()) {
+    case kDsv4NpuBlockSize:
+      EXPECT_EQ(capacity.swa_count(), 34);  // 18 + 16 blocks for publication.
+      break;
+    case kDsv4FixedBlockSize:
+      EXPECT_EQ(capacity.swa_count(), 26);  // 18 + 8 blocks for the burst.
+      break;
+    default:
+      FAIL() << "Missing SWA capacity expectation for KV block size "
+             << capacity.block_size();
+  }
 
   // Without a published KV checkpoint there is nothing to retain, so the
   // per-DP share still sizes the ring.

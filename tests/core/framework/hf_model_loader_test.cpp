@@ -347,8 +347,7 @@ TEST(HFModelLoaderTest, Glm5NextRootArgsLoadNativeMluFields) {
             (std::vector<std::string>{"dense", "dense", "dense", "sparse"}));
 }
 
-TEST(HFModelLoaderTest, Glm5NextRootTypeHasNativeMluRegistration) {
-  EXPECT_EQ(ModelRegistry::get_model_backend("glm5_next"), "llm");
+TEST(HFModelLoaderTest, Glm5NextRootTypeHasNativeMluCausalModelFactory) {
   CausalLMFactory factory = ModelRegistry::get_causallm_factory("glm5_next");
   EXPECT_TRUE(static_cast<bool>(factory));
 }

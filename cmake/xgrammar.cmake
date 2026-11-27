@@ -9,6 +9,13 @@ set(XGRAMMAR_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/../third_party/xgrammar")
 # pinned to the same commit (v1.0) that xgrammar's own 3rdparty/dlpack records.
 set(DLPACK_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/../third_party/dlpack")
 
+if(USE_MLU AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+  execute_process(
+    COMMAND git submodule update --init -- third_party/xgrammar third_party/dlpack
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    COMMAND_ERROR_IS_FATAL ANY)
+endif()
+
 file(GLOB_RECURSE XGRAMMAR_CPU_SOURCES CONFIGURE_DEPENDS
   "${XGRAMMAR_SOURCE_DIR}/cpp/*.cc")
 list(FILTER XGRAMMAR_CPU_SOURCES EXCLUDE REGEX "/cpp/tvm_ffi/.*\\.cc$")

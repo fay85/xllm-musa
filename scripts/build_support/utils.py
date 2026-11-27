@@ -14,6 +14,17 @@ from scripts.logger import logger
 _MOONCAKE_DEPENDENCIES_COMMAND = "bash dependencies.sh -y"
 _GO_DEFAULT_PROXY = "https://proxy.golang.org,direct"
 _MOONCAKE_GO_PROXY = "https://goproxy.cn|https://goproxy.io|direct"
+_MLU_SUBMODULES = (
+    "third_party/brpc",
+    "third_party/cpprestsdk",
+    "third_party/etcd_cpp_apiv3",
+    "third_party/minja",
+    "third_party/Mooncake",
+    "third_party/sentencepiece",
+    "third_party/smhasher",
+    "third_party/spdlog",
+    "third_party/xxHash",
+)
 
 
 def _b64(s: str) -> str:
@@ -264,8 +275,10 @@ def _run_git_command(repo_root: str, args: list[str]) -> tuple[bool, str]:
     return True, output
 
 
-def _collect_submodule_init_issues(repo_root: str) -> dict[str, str]:
-    ok, output = _run_git_command(repo_root, ["submodule", "status", "--recursive"])
+def _collect_submodule_init_issues(repo_root: str, paths: tuple[str, ...]) -> dict[str, str]:
+    path_args = ["--", *paths] if paths else []
+    status = ["submodule", "status", "--recursive", *path_args]
+    ok, output = _run_git_command(repo_root, status)
     if not ok:
         logger.error("❌ Failed to inspect submodule status.")
         _print_manual_check_commands(
@@ -463,9 +476,20 @@ def _run_dependencies_script_or_exit(script_path: str) -> None:
         exit(1)
 
 
-def _validate_submodules_or_exit(repo_root: str) -> None:
-    issues = _collect_submodule_init_issues(repo_root)
+def _prepare_submodules_or_exit(repo_root: str, device: str) -> None:
+    paths = _MLU_SUBMODULES if device == "mlu" else ()
+    issues = _collect_submodule_init_issues(repo_root, paths)
+    if not issues:
+        return
 
+    update = ["git", "submodule", "update", "--init", "--recursive", "--", *paths]
+    if device == "mlu":
+        logger.info("Preparing MLU build dependencies: %s", shlex.join(update))
+        ok, _, error = _run_command(update, cwd=repo_root, passthrough_output=True)
+        if not ok:
+            logger.error("MLU submodule update failed: %s", error)
+            exit(1)
+        issues = _collect_submodule_init_issues(repo_root, paths)
     if issues:
         logger.error("❌ Submodule commit check failed. Repositories not correctly initialized:")
         for path in sorted(issues):
@@ -678,6 +702,6 @@ def pre_build(device: str, force_dependencies: bool = False) -> None:
     script_path = get_base_dir()
 
     _ensure_git_safe_directory_or_exit(_get_mooncake_source_dir(script_path))
-    _validate_submodules_or_exit(script_path)
+    _prepare_submodules_or_exit(script_path, device)
     _ensure_prebuild_dependencies_installed(script_path, force_install=force_dependencies)
     _ensure_xllm_ops_rebuild_state(device)

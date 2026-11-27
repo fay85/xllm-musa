@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "kernels/mlu/bangc/include/deepseek_v41.h"
+#include "kernels/mlu/bangc/include/deepseek_v41_constants.h"
 
 namespace xllm::kernel::mlu::bangc {
 namespace {
@@ -106,11 +107,12 @@ Inputs make_inputs(std::vector<int32_t> lengths,
                     .repeat_interleave(2)
                     .unsqueeze(0);
   d.rope = torch::cat({angles.cos(), angles.sin()}, 1).to(device);
-  const int64_t columns = (end + ratio * 128 - 1) / (ratio * 128);
+  constexpr int64_t kTokensPerPage = kDeepseekV41MluKVBlockSize;
+  const int64_t columns = (end + kTokensPerPage - 1) / kTokensPerPage;
   const int64_t max_rows =
       batch == 0 ? 0 : *std::max_element(d.lengths.begin(), d.lengths.end());
   const int64_t pages_per_seq =
-      (max_rows + ratio * 128 - 1) / (ratio * 128) + 2;
+      (max_rows + kTokensPerPage - 1) / kTokensPerPage + 2;
   auto table = torch::empty({batch, columns}, ints);
   for (int64_t seq = 0; seq < batch; ++seq) {
     table[seq].copy_(torch::arange(columns, ints).remainder(pages_per_seq) +
@@ -124,7 +126,8 @@ Inputs make_inputs(std::vector<int32_t> lengths,
       packed ? state.slice(2, 0, 512) : state.slice(2, 0, 512).contiguous();
   d.state_score =
       packed ? state.slice(2, 512) : state.slice(2, 512).contiguous();
-  auto cache_owner = torch::full({batch * pages_per_seq + 3, 128, 512},
+  const int64_t page_rows = kTokensPerPage / ratio;
+  auto cache_owner = torch::full({batch * pages_per_seq + 3, page_rows, 512},
                                  -7,
                                  fp32.dtype(torch::kBFloat16).device(device));
   d.cache_storage = cache_owner;
@@ -251,11 +254,11 @@ Expected reference(const Inputs& d, bool staged) {
               .to(torch::kBFloat16);
       auto pos = torch::arange(first, stop, torch::kInt32) * d.ratio;
       auto logical = torch::arange(first, stop, torch::kInt64);
-      auto slots = table[seq]
-                           .index_select(0, torch::floor_divide(logical, 128))
-                           .to(torch::kInt64) *
-                       128 +
-                   logical.remainder(128);
+      const int64_t page_rows = d.cache.size(1);
+      auto pages =
+          table[seq].index_select(0, torch::floor_divide(logical, page_rows));
+      auto slots =
+          pages.to(torch::kInt64) * page_rows + logical.remainder(page_rows);
       latent_list.emplace_back(latent);
       position_list.emplace_back(pos);
       slot_list.emplace_back(slots.to(torch::kInt32));
@@ -519,7 +522,7 @@ TEST(FusedCompressKvCacheTest, EmptyUnbalancedAndRoundingLayouts) {
                                packed,
                                gamma,
                                distribution);
-          d.cache = d.cache.view({d.cache.size(0), 128, 1, 512});
+          d.cache = d.cache.unsqueeze(2);
           check(d);
         }
       }

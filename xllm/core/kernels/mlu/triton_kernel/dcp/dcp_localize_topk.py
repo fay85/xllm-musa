@@ -59,11 +59,11 @@ def tmo_dcp_localize_topk_kernel(
                 else:
                     b_slot = tl.load(b_source_ptr, b_valid[:, None, None], other=-1)
                 b_topology_mask = ((tl.cast(dcp_size, tl.int32) - 1) << 4) | -2147483648
-                b_owned = tl.extra.mlu.libdevice.eq(b_slot & b_topology_mask, tl.cast(dcp_rank, tl.int32) << 4)
+                b_owned = (b_slot & b_topology_mask) == (tl.cast(dcp_rank, tl.int32) << 4)
                 if b_full_lens:
                     b_keep = b_owned
                 else:
-                    b_keep = (b_cols[None, :, :] < b_lens[:, None, None]).to(tl.int8) & b_owned
+                    b_keep = (b_cols[None, :, :] < b_lens[:, None, None]) & b_owned
                 b_filter = (tl.arange(0, 64)[:, None] >= tl.arange(0, 64)[None, :]).to(tl.int8).reshape((64, 1, 1, 64))
                 b_intra = tl.extra.mlu.conv2d(
                     b_keep.to(tl.int8).reshape((1, 1, ROWS * 32, 64)),

@@ -175,23 +175,23 @@ cc_test(
 cc_test(
   NAME engram_gate_test
   SRCS engram_gate_test.cpp
-  DEPS xllm_mlu_ops torch torch_mlu glog::glog GTest::gtest_main
+  DEPS xllm_mlu_ops torch torch_mlu cnrt glog::glog GTest::gtest_main
 )
 
 cc_test(
   NAME engram_dequantize_test
   SRCS engram_dequantize_test.cpp
-  DEPS xllm_mlu_ops torch torch_mlu glog::glog GTest::gtest_main
+  DEPS xllm_mlu_ops torch torch_mlu cnrt glog::glog GTest::gtest_main
 )
 
 cc_test(
   NAME engram_gather_dequantize_test
   SRCS engram_gather_dequantize_test.cpp
-  DEPS xllm_mlu_ops torch torch_mlu glog::glog GTest::gtest_main
+  DEPS xllm_mlu_ops torch torch_mlu cnrt glog::glog GTest::gtest_main
 )
 
 cc_test(
   NAME engram_hash_test
   SRCS engram_hash_test.cpp
-  DEPS xllm_mlu_ops torch torch_mlu glog::glog GTest::gtest_main
+  DEPS xllm_mlu_ops torch torch_mlu cnrt glog::glog GTest::gtest_main
 )
