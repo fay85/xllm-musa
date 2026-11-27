@@ -41,14 +41,17 @@ Data flow:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from safetensors import safe_open
 
 from xllm.python import distributed, kernels
 from xllm.python.layers import ColumnParallelLinear, RowParallelLinear
+from xllm.python.model_loader.module_loaders import quant_description_weight_is_quantized, read_quant_description
 from xllm.python.models.base import PyModelBase
 from xllm.python.models.glm5_next import (
     Glm5NextConfig,
@@ -339,6 +342,15 @@ def _apply_rotary_pos_emb_vision(
     cos: torch.Tensor,
     sin: torch.Tensor,
 ) -> tuple[torch.Tensor, torch.Tensor]:
+    if q.device.type == "npu" and q.dtype == torch.bfloat16 and q.shape[-1] == 64:
+        # RotaryMul keeps the FP32 multiply/add rounding used by the
+        # reference while avoiding the separate casts and elementwise ops.
+        cos_full = cos.unsqueeze(0).unsqueeze(-2)
+        sin_full = sin.unsqueeze(0).unsqueeze(-2)
+        return (
+            kernels.vision_rotary_mul(q, cos_full, sin_full),
+            kernels.vision_rotary_mul(k, cos_full, sin_full),
+        )
     orig_q_dtype = q.dtype
     orig_k_dtype = k.dtype
     q, k = q.float(), k.float()
@@ -375,8 +387,9 @@ class VisionAttention(nn.Module):
     """MHA with QK-RMSNorm + RoPE, varlen via ``cu_seqlens`` chunking.
 
     Q/K/V are projected, Q and K get per-head RMSNorm, RoPE is applied, then
-    each ``cu_seqlens`` chunk is attended independently (non-causal) and the
-    outputs are concatenated. Matches the HF GlmOcr non-flash path.
+    each chunk is attended independently (non-causal). ``cu_seqlens`` lists
+    cumulative chunk ends without the leading zero. The outputs are
+    concatenated, matching the HF GlmOcr non-flash path.
 
     TP sharding (mirrors va ``Qwen2VisionAttention``):
       - ``qkv``: :class:`ColumnParallelLinear` (output dim sharded, per-head).
@@ -430,7 +443,7 @@ class VisionAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        cu_seqlens: torch.Tensor,
+        cu_seqlens: list[int],
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
@@ -449,7 +462,7 @@ class VisionAttention(nn.Module):
             query_states.contiguous(),
             key_states.contiguous(),
             value_states.contiguous(),
-            actual_seq_lengths=cu_seqlens[1:].tolist(),
+            actual_seq_lengths=cu_seqlens,
             num_heads=self.num_heads_local,
             num_key_value_heads=self.num_heads_local,
             scale=self.scaling,
@@ -525,7 +538,7 @@ class VisionBlock(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        cu_seqlens: torch.Tensor,
+        cu_seqlens: list[int],
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
     ) -> torch.Tensor:
         attn_output = self.attn(
@@ -678,7 +691,7 @@ class Glm5NextVisionModel(nn.Module):
             grid_thw: ``(num_images, 3)`` T/H/W per image.
         """
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
-        cu_seqlens = get_vision_cu_seqlens(grid_thw)
+        cu_seqlens = get_vision_cu_seqlens(grid_thw)[1:].tolist()
 
         hidden_states = self.patch_embed(hidden_states)
         rotary_emb = self.rotary_pos_emb(position_ids)
@@ -857,6 +870,56 @@ class Glm5NextVisionModel(nn.Module):
 # ---------------------------------------------------------------------------
 
 
+def _load_vision_output_rotation(
+    model_path: str | None, vision_model: nn.Module, hidden_size: int
+) -> torch.Tensor | None:
+    """Adapt a separate, unexported vision tower to a ModelSlim-rotated LLM."""
+    description = read_quant_description(model_path)
+    if description is None:
+        return None
+    is_rot_used = description.get("is_rot_used", False)
+    if not isinstance(is_rot_used, bool):
+        raise ValueError("quant_model_description.json is_rot_used must be a boolean")
+    if not is_rot_used:
+        return None
+
+    # The export manifest uses separate gate/up keys, while the runtime packs
+    # them. Full FLOAT coverage means ModelSlim already folded Q into down_proj;
+    # zero coverage identifies a separate vision tower that still needs Q.
+    expected_visual = set()
+    for name, _ in vision_model.named_parameters():
+        names = (name.replace("gate_up_proj", "gate_proj"), name.replace("gate_up_proj", "up_proj"))
+        expected_visual.update("model.visual." + key for key in names)
+    exported_visual = {key for key in description if key.startswith("model.visual.")}
+    if exported_visual:
+        if exported_visual != expected_visual or any(
+            quant_description_weight_is_quantized(description, key) is not False for key in exported_visual
+        ):
+            raise ValueError(
+                "Rotated GLM visual export must have complete FLOAT manifest coverage or no visual entries"
+            )
+        return None
+
+    optional = description.get("optional")
+    quarot = optional.get("quarot") if isinstance(optional, dict) else None
+    rotation_map = quarot.get("rotation_map") if isinstance(quarot, dict) else None
+    mapped_path = rotation_map.get("global_rotation") if isinstance(rotation_map, dict) else None
+    if not isinstance(mapped_path, str) or not mapped_path.strip():
+        raise ValueError("Unexported GLM vision requires optional.quarot.rotation_map.global_rotation")
+    rotation_path = Path(mapped_path)
+    if rotation_path.is_absolute() or ".." in rotation_path.parts:
+        raise ValueError("optional global_rotation must map to a checkpoint-relative file")
+    with safe_open(Path(model_path) / rotation_path, framework="pt", device="cpu") as tensors:
+        if "global_rotation" not in tensors.keys():
+            raise ValueError("Mapped QuaRot file must contain global_rotation, not rot.weight")
+        rotation = tensors.get_tensor("global_rotation")
+    if rotation.shape != (hidden_size, hidden_size):
+        raise ValueError(f"global_rotation must have shape ({hidden_size}, {hidden_size}), got {tuple(rotation.shape)}")
+    if not rotation.is_floating_point() or not torch.isfinite(rotation).all().item():
+        raise ValueError("global_rotation must be a finite floating-point matrix")
+    return rotation.float()
+
+
 class Glm5NextVLModel(Glm5NextForCausalLM):
     """GLM-5.3-Flash-VL composition: ViT + LLM + lm_head.
 
@@ -934,9 +997,13 @@ class Glm5NextVLModel(Glm5NextForCausalLM):
         # (which default to float32 inside Glm5NextModel) are bf16 like the rest.
         self.to(device=device, dtype=dtype)
 
-        # ModelSlim exports the hidden-space rotation in merger.down_proj.
-        # The optional QuaRot tensor is quantization metadata; applying it here
-        # would rotate image and video embeddings a second time.
+        # Register after the whole-model cast so Q retains FP32 precision.
+        rotation = _load_vision_output_rotation(config.get("model_path"), self.vision_model, tcfg.hidden_size)
+        if rotation is not None and vcfg.out_hidden_size != tcfg.hidden_size:
+            raise ValueError("Rotated GLM vision output width must match the language model hidden_size")
+        self.register_buffer(
+            "_vision_output_rotation", rotation.to(device=device) if rotation is not None else None, persistent=False
+        )
 
     # ------------------------------------------------------------------
     # Connection logic: ViT → LLM
@@ -959,7 +1026,12 @@ class Glm5NextVLModel(Glm5NextForCausalLM):
         """
         pixel_values = pixel_values.type(self.vision_model.dtype)
         out = self.vision_model(pixel_values, grid_thw)
-        return out.pooler_output
+        features = out.pooler_output
+        if self._vision_output_rotation is not None:
+            if features.shape[-1] != self._vision_output_rotation.shape[0]:
+                raise ValueError("GLM vision feature width does not match global_rotation")
+            features = (features.float() @ self._vision_output_rotation).to(dtype=features.dtype)
+        return features
 
     def encode_multimodal(self, data: MultimodalData, token_counts: EncoderTokenCounts) -> EncoderOutputs:
         return encode_batched_vision(self.encode, data, token_counts)

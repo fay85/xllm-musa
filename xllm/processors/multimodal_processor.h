@@ -55,6 +55,8 @@ class MultimodalProcessorBase {
   virtual bool process_multimodal(const MMInput& inputs,
                                   MMData& data) const = 0;
 
+  virtual VideoFrameSelector video_frame_selector() const { return {}; }
+
   virtual bool bind_prompt_tokens(const std::vector<int32_t>& /*token_ids*/,
                                   MMData& mm_data) const {
     return !mm_data.valid();
@@ -118,6 +120,10 @@ class MultimodalProcessor final : public MultimodalProcessorBase {
   }
 
   ~MultimodalProcessor() override = default;
+
+  VideoFrameSelector video_frame_selector() const override {
+    return video_processor_->video_frame_selector();
+  }
 
   bool process_prompt(std::string& prompt,
                       MMData& mm_data,

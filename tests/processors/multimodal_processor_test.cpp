@@ -225,6 +225,96 @@ TYPED_TEST(VideoPixelDtypeTest, MatchesFinalFloat32CastAndPreservesMetadata) {
                            expected_metadata->frame_indices));
 }
 
+TEST(MultimodalProcessorTest, Qwen3VLPreselectedVideoMatchesLegacyOutput) {
+  ModelArgs args = pixel_dtype_args();
+  args.model_type("qwen3_vl")
+      .hidden_size(5120)
+      .n_layers(64)
+      .mm_image_patch_size(16)
+      .mm_image_temporal_patch_size(2);
+  const Qwen3VLVideoProcessor processor(args);
+  const auto selector = processor.video_frame_selector();
+  ASSERT_TRUE(selector);
+  EXPECT_TRUE(selector.apply_display_rotation);
+  EXPECT_TRUE(selector.match_opencv_rgb);
+
+  for (const int32_t total_frames : {1, 12, 15}) {
+    SCOPED_TRACE(total_frames);
+    VideoMetadata metadata;
+    metadata.fps = 6.0;
+    metadata.total_num_frames = total_frames;
+    metadata.duration = total_frames / metadata.fps;
+    const auto video = torch::arange(total_frames * 32 * 64 * 3, torch::kInt64)
+                           .remainder(251)
+                           .to(torch::kUInt8)
+                           .reshape({total_frames, 32, 64, 3});
+    MMDataItem legacy(MMType::VIDEO);
+    ASSERT_TRUE(
+        processor.process(video.permute({0, 3, 1, 2}), metadata, legacy));
+    const auto expected_metadata = legacy.get_metadata<VideoMetadata>();
+    ASSERT_TRUE(expected_metadata.has_value());
+
+    metadata.frame_indices = torch::tensor(selector(metadata), torch::kLong);
+    metadata.frames_preselected = true;
+    const auto selected =
+        video.index_select(0, metadata.frame_indices).permute({0, 3, 1, 2});
+    MMDataItem actual(MMType::VIDEO);
+    ASSERT_TRUE(processor.process(selected, metadata, actual));
+    const auto actual_metadata = actual.get_metadata<VideoMetadata>();
+    ASSERT_TRUE(actual_metadata.has_value());
+    EXPECT_TRUE(torch::equal(actual_metadata->frame_indices,
+                             expected_metadata->frame_indices));
+    EXPECT_EQ(actual_metadata->timestamps, expected_metadata->timestamps);
+    EXPECT_EQ(actual_metadata->sampled_fps, expected_metadata->sampled_fps);
+    for (const auto* key :
+         {"pixel_values_videos", "video_grid_thw", "second_per_grid_ts"}) {
+      EXPECT_TRUE(torch::equal(*actual.get<torch::Tensor>(key),
+                               *legacy.get<torch::Tensor>(key)))
+          << key;
+    }
+  }
+}
+
+TEST(MultimodalProcessorTest, Qwen3VL32BUsesVaRoundToEvenAndEndpoints) {
+  ModelArgs args = pixel_dtype_args();
+  args.model_type("qwen3_vl").hidden_size(5120).n_layers(64);
+  const auto selector = Qwen3VLVideoProcessor(args).video_frame_selector();
+  ASSERT_TRUE(selector);
+  VideoMetadata metadata;
+  metadata.fps = 4.0;
+  metadata.total_num_frames = 10;
+  EXPECT_EQ(selector(metadata), (std::vector<int64_t>{0, 2, 4, 7, 9}));
+}
+
+TEST(MultimodalProcessorTest, OtherQwenVideoModelsDoNotPreselectFrames) {
+  ModelArgs args = pixel_dtype_args();
+  for (const auto* model_type :
+       {"qwen3_vl", "qwen3_vl_moe", "qwen3_5", "qwen3_5_moe"}) {
+    SCOPED_TRACE(model_type);
+    args.model_type(model_type);
+    EXPECT_FALSE(Qwen3VLVideoProcessor(args).video_frame_selector());
+  }
+}
+
+TEST(MultimodalProcessorTest, QwenSampledDecodeCanOverrideShapeDefault) {
+  ModelArgs args = pixel_dtype_args();
+  args.model_type("qwen3_vl");
+  const ProcessorConfig enabled(
+      nlohmann::json{{"video", {{"enable_sampled_decode", true}}}});
+  const auto enabled_processor =
+      create_processor<Qwen3VLVideoProcessor>(args, enabled);
+  enabled.validate("video");
+  EXPECT_TRUE(enabled_processor->video_frame_selector());
+
+  args.hidden_size(5120).n_layers(64);
+  const ProcessorConfig disabled(
+      nlohmann::json{{"video", {{"enable_sampled_decode", false}}}});
+  const auto disabled_processor =
+      create_processor<Qwen3VLVideoProcessor>(args, disabled);
+  disabled.validate("video");
+  EXPECT_FALSE(disabled_processor->video_frame_selector());
+}
+
 TEST(MultimodalProcessorTest, LegacyProcessorDoesNotConsumeOverrides) {
   const ModelArgs args{};
   const ProcessorConfig defaults;
@@ -286,6 +376,35 @@ TEST(MultimodalProcessorTest, VideoOverridesDoNotEnableImagePixelValidation) {
   const auto processor = create_processor<Qwen2VLImageProcessor>(args, config);
   config.validate("image");
   EXPECT_DEATH(config.validate("video"), "video.frame_stride");
+}
+
+TEST(MultimodalProcessorTest, GlmPadsImageContentWithoutChangingQwenResize) {
+  ModelArgs args = pixel_dtype_args();
+  args.model_type("glm5_next")
+      .dtype("bfloat16")
+      .mm_image_min_tokens(1)
+      .mm_image_max_tokens(8000)
+      .mm_image_normalize_mean({0.5, 0.5, 0.5})
+      .mm_image_normalize_std({0.5, 0.5, 0.5});
+  const torch::Tensor image = torch::full({3, 29, 43}, 255, torch::kUInt8);
+  const Qwen2VLImageProcessor glm_processor(args);
+  std::vector<MMDataItem> actual;
+  ASSERT_TRUE(glm_processor.process({image}, actual));
+
+  args.model_type("qwen3_vl");
+  const Qwen2VLImageProcessor qwen_processor(args);
+  auto canvas = torch::zeros({3, 56, 56}, torch::kUInt8);
+  canvas.slice(1, 0, 29).slice(2, 0, 43).copy_(image);
+  std::vector<MMDataItem> expected;
+  ASSERT_TRUE(qwen_processor.process({canvas}, expected));
+  ASSERT_EQ(actual.size(), 1);
+  expect_pixel_item_matches(actual[0], expected[0]);
+
+  std::vector<MMDataItem> qwen_items;
+  ASSERT_TRUE(qwen_processor.process({image}, qwen_items));
+  const auto pixels = qwen_items[0].get<torch::Tensor>("pixel_values");
+  ASSERT_TRUE(pixels.has_value());
+  EXPECT_TRUE(torch::all(*pixels == 1).item<bool>());
 }
 
 TEST(MultimodalProcessorTest, GlmPreservesItsTemporalAreaSemantics) {

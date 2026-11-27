@@ -15,6 +15,8 @@ limitations under the License.
 
 #pragma once
 
+#include <array>
+
 #include "core/framework/model/model_output.h"
 #include "core/layers/common/lm_head.h"
 #include "core/layers/qwen3_vision_layer.h"
@@ -36,6 +38,10 @@ class Qwen3_VisionPatchEmbedImpl : public torch::nn::Module {
     auto model_args = context.get_model_args();
     auto options = context.get_tensor_options();
 
+    patch_shape_ = {model_args.mm_num_channels(),
+                    model_args.mm_temporal_patch_size(),
+                    model_args.mm_patch_size()};
+
     auto in_features = model_args.mm_num_channels() *
                        model_args.mm_temporal_patch_size() *
                        model_args.mm_patch_size() * model_args.mm_patch_size();
@@ -51,7 +57,21 @@ class Qwen3_VisionPatchEmbedImpl : public torch::nn::Module {
     proj_->bias.set_data(proj_->bias.to(options));
   }
 
-  torch::Tensor forward(torch::Tensor x) { return proj_(x); }
+  torch::Tensor forward(torch::Tensor x) {
+#if defined(USE_NPU)
+    // Match the Ascend Conv3D path. A flattened Linear can select a
+    // different accumulation path for large patch batches.
+    const auto& shape = patch_shape_;
+    auto input = x.reshape({-1, shape[0], shape[1], shape[2], shape[2]});
+    auto weight =
+        proj_->weight.reshape({-1, shape[0], shape[1], shape[2], shape[2]});
+    return torch::conv3d(
+               input, weight, proj_->bias, {shape[1], shape[2], shape[2]})
+        .reshape({-1, proj_->weight.size(0)});
+#else
+    return proj_(x);
+#endif
+  }
 
   void load_state_dict(const StateDict& state_dict) {
     auto weight = state_dict.get_tensor("proj.weight");
@@ -80,6 +100,7 @@ class Qwen3_VisionPatchEmbedImpl : public torch::nn::Module {
   }
 
  private:
+  std::array<int64_t, 3> patch_shape_;
   bool proj_weight_loaded_ = false;
   bool proj_bias_loaded_ = false;
   torch::nn::Linear proj_{nullptr};
@@ -186,6 +207,32 @@ class Qwen3_VisionPatchMergerImpl : public torch::nn::Module {
       return;
     }
 
+    is_dense_parallel_ = parallel_args.tp_group_ != nullptr &&
+                         parallel_args.tp_group_->world_size() > 1;
+    if (is_dense_parallel_) {
+      // Preserve dense weights while matching the vision TP GEMM boundaries.
+      dense_fc1_ =
+          register_module("linear_fc1",
+                          layer::ColumnParallelLinear(hidden_size_,
+                                                      hidden_size_,
+                                                      /*bias=*/true,
+                                                      /*gather_output=*/false,
+                                                      QuantArgs(),
+                                                      parallel_args.tp_group_,
+                                                      options));
+      dense_fc2_ = register_module(
+          "linear_fc2",
+          layer::RowParallelLinear(hidden_size_,
+                                   d_model,
+                                   /*bias=*/true,
+                                   /*input_is_parallelized=*/true,
+                                   /*enable_result_reduction=*/true,
+                                   QuantArgs(),
+                                   parallel_args.tp_group_,
+                                   options));
+      return;
+    }
+
     auto fc1 = torch::nn::Linear(
         torch::nn::LinearOptions(hidden_size_, hidden_size_).bias(true));
     fc1->weight.set_data(fc1->weight.to(options));
@@ -206,6 +253,9 @@ class Qwen3_VisionPatchMergerImpl : public torch::nn::Module {
       x = norm_(x).view({-1, hidden_size_});
     if (is_smoothquant_) {
       return quant_fc2_->forward(quant_fc1_->forward(x));
+    }
+    if (is_dense_parallel_) {
+      return dense_fc2_->forward(torch::gelu(dense_fc1_->forward(x)));
     }
     return mlp_->forward(x);
   }
@@ -233,6 +283,20 @@ class Qwen3_VisionPatchMergerImpl : public torch::nn::Module {
           state_dict.get_dict_with_prefix("linear_fc1."));
       quant_fc2_->load_state_dict(
           state_dict.get_dict_with_prefix("linear_fc2."));
+      return;
+    }
+
+    if (is_dense_parallel_) {
+      const auto& fc1_dict = state_dict.get_dict_with_prefix("linear_fc1.");
+      dense_fc1_->load_state_dict(fc1_dict);
+      if (fc1_dict.get_tensor("bias").defined()) {
+        is_fc1_bias_loaded = true;
+      }
+      const auto& fc2_dict = state_dict.get_dict_with_prefix("linear_fc2.");
+      dense_fc2_->load_state_dict(fc2_dict);
+      if (fc2_dict.get_tensor("bias").defined()) {
+        is_fc2_bias_loaded = true;
+      }
       return;
     }
 
@@ -281,6 +345,21 @@ class Qwen3_VisionPatchMergerImpl : public torch::nn::Module {
           << "bias is not loaded for " << prefix + "norm" + ".bias";
       return;
     }
+    if (is_dense_parallel_) {
+      CHECK(dense_fc1_->is_weight_loaded())
+          << "weight is not loaded for " << prefix + "linear_fc1";
+      CHECK(dense_fc2_->is_weight_loaded())
+          << "weight is not loaded for " << prefix + "linear_fc2";
+      CHECK(is_fc1_bias_loaded)
+          << "bias is not loaded for " << prefix + "linear_fc1.bias";
+      CHECK(is_fc2_bias_loaded)
+          << "bias is not loaded for " << prefix + "linear_fc2.bias";
+      CHECK(is_norm_weight_loaded)
+          << "weight is not loaded for " << prefix + "norm.weight";
+      CHECK(is_norm_bias_loaded)
+          << "bias is not loaded for " << prefix + "norm.bias";
+      return;
+    }
     CHECK(is_fc1_weight_loaded)
         << "weight is not loaded for " << prefix + "linear_fc1" + ".weight";
     CHECK(is_fc1_bias_loaded)
@@ -302,6 +381,8 @@ class Qwen3_VisionPatchMergerImpl : public torch::nn::Module {
   torch::nn::Sequential mlp_{nullptr};
   layer::ColumnParallelLinear quant_fc1_{nullptr};
   layer::RowParallelLinear quant_fc2_{nullptr};
+  layer::ColumnParallelLinear dense_fc1_{nullptr};
+  layer::RowParallelLinear dense_fc2_{nullptr};
   std::tuple<torch::nn::Linear, torch::nn::GELU, torch::nn::Linear> layers_ = {
       nullptr,
       nullptr,
@@ -313,6 +394,7 @@ class Qwen3_VisionPatchMergerImpl : public torch::nn::Module {
   bool is_norm_weight_loaded = false;
   bool is_norm_bias_loaded = false;
   bool is_smoothquant_ = false;
+  bool is_dense_parallel_ = false;
 };
 TORCH_MODULE(Qwen3_VisionPatchMerger);
 
@@ -426,14 +508,16 @@ class Qwen3_VisionTransformerImpl : public torch::nn::Module {
       int64_t h = grid_cpu[idx][1].item<int64_t>();
       int64_t w = grid_cpu[idx][2].item<int64_t>();
 
-      auto h_idxs =
-          torch::linspace(
-              0, static_cast<float>(num_grid_per_side_ - 1), h, torch::kFloat32)
-              .to(device);
-      auto w_idxs =
-          torch::linspace(
-              0, static_cast<float>(num_grid_per_side_ - 1), w, torch::kFloat32)
-              .to(device);
+      auto h_idxs = torch::linspace(
+          0,
+          static_cast<float>(num_grid_per_side_ - 1),
+          h,
+          torch::TensorOptions().dtype(torch::kFloat32).device(device));
+      auto w_idxs = torch::linspace(
+          0,
+          static_cast<float>(num_grid_per_side_ - 1),
+          w,
+          torch::TensorOptions().dtype(torch::kFloat32).device(device));
 
       auto h_floor = h_idxs.to(torch::kLong);
       auto w_floor = w_idxs.to(torch::kLong);

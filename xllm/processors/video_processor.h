@@ -33,6 +33,8 @@ class VideoProcessor {
                        const VideoMetadata& metadata,
                        MMDataItem& output_item) const = 0;
 
+  virtual VideoFrameSelector video_frame_selector() const { return {}; }
+
  protected:
   VideoProcessor() = default;
   explicit VideoProcessor(const ModelArgs& args)

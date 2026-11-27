@@ -75,7 +75,7 @@ class ImageHandler : public MMHandlerBase {
 
 class VideoHandler : public MMHandlerBase {
  public:
-  VideoHandler() = default;
+  explicit VideoHandler(VideoFrameSelector select_frames = {});
   ~VideoHandler() = default;
 
   MMErrCode load(const MMContent& content,
@@ -85,6 +85,7 @@ class VideoHandler : public MMHandlerBase {
 
  private:
   std::string dataurl_prefix_{"data:video"};
+  VideoFrameSelector select_frames_;
 };
 
 class AudioHandler : public MMHandlerBase {
@@ -103,7 +104,7 @@ class AudioHandler : public MMHandlerBase {
 
 class MMHandlerSet {
  public:
-  MMHandlerSet();
+  explicit MMHandlerSet(const VideoFrameSelector& select_frames = {});
   ~MMHandlerSet();
 
   MMErrCode process(const std::string& type,

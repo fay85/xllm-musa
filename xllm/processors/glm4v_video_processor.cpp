@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "processors/glm4v_video_processor.h"
 
+#include <algorithm>
 #include <cfenv>
 #include <cmath>
 #include <unordered_set>
@@ -91,12 +92,14 @@ std::optional<Size> smart_resize_tokens(int32_t num_frames,
                                         int32_t temporal_factor,
                                         int32_t factor,
                                         int32_t min_tokens,
-                                        int32_t max_tokens) {
-  if (height < factor || width < factor) {
+                                        int32_t max_tokens,
+                                        bool match_va) {
+  if (height <= 0 || width <= 0 ||
+      (!match_va && (height < factor || width < factor))) {
     LOG(ERROR) << "Height or width must be larger than factor";
     return std::nullopt;
   }
-  if (num_frames < temporal_factor) {
+  if (num_frames <= 0 || (!match_va && num_frames < temporal_factor)) {
     LOG(ERROR) << "num_frames must be larger than temporal_factor, num_frames: "
                << num_frames << ", temporal_factor: " << temporal_factor;
     return std::nullopt;
@@ -159,6 +162,10 @@ std::optional<Size> smart_resize_tokens(int32_t num_frames,
   }
 
   if (aligned_budget > max_pixels) {
+    if (match_va &&
+        static_cast<int64_t>(aligned_frames) * factor * factor > max_pixels) {
+      return std::nullopt;
+    }
     auto fitted = fit_within_budget(aligned_frames);
     aligned_h = fitted.first;
     aligned_w = fitted.second;
@@ -196,8 +203,90 @@ Glm4VVideoProcessor::Glm4VVideoProcessor(const ModelArgs& args,
   }
 }
 
+namespace {
+
+std::vector<int64_t> sample_fixed_video_indices(const VideoMetadata& metadata,
+                                                double target_fps,
+                                                int32_t temporal_patch_size) {
+  std::vector<int64_t> indices;
+  const int32_t total_frames = metadata.total_num_frames;
+  if (total_frames <= 0 || !(metadata.fps > 0.0) ||
+      !std::isfinite(metadata.fps) || !(target_fps > 0.0) ||
+      !std::isfinite(target_fps) || temporal_patch_size <= 0) {
+    return indices;
+  }
+  constexpr int32_t kMaxFrameCount = 2048;
+  const double duration =
+      metadata.duration > 0.0
+          ? metadata.duration
+          : std::rint((total_frames - 1) / metadata.fps) + 1;
+  const int32_t count = std::max(
+      1,
+      static_cast<int32_t>(std::min(duration * target_fps,
+                                    static_cast<double>(kMaxFrameCount))));
+  indices.reserve(count);
+  if (total_frames < count) {
+    for (int64_t index = 0; index < count; ++index) {
+      indices.push_back(index * total_frames / count);
+    }
+  } else {
+    const double step = 1.0 / (temporal_patch_size * target_fps);
+    const double seconds_per_frame = 1.0 / metadata.fps;
+    double next_second = 0.0;
+    for (int32_t index = 0; index < total_frames; ++index) {
+      if (index * seconds_per_frame < next_second) {
+        continue;
+      }
+      indices.push_back(index);
+      next_second += step;
+      if (next_second >= std::floor(duration) || indices.size() > count) {
+        break;
+      }
+    }
+    if (indices.size() != count) {
+      const bool extend = !indices.empty() && indices.size() < count;
+      const int64_t start = extend ? indices.front() : 0;
+      const int64_t end = extend ? indices.back() : total_frames - 1;
+      const double stride =
+          count > 1 ? static_cast<double>(end - start) / (count - 1) : 0.0;
+      indices.resize(count);
+      for (int32_t index = 0; index < count; ++index) {
+        const double offset = index * stride;
+        indices[index] = static_cast<int64_t>(start + offset);
+      }
+      if (count > 1) {
+        indices.back() = end;
+      }
+    }
+  }
+  indices.erase(std::unique(indices.begin(), indices.end()), indices.end());
+  return indices;
+}
+
+}  // namespace
+
+VideoFrameSelector Glm4VVideoProcessor::video_frame_selector() const {
+  if (sampling_mode_ != SamplingMode::FIXED_FPS || !do_sample_frame_) {
+    return {};
+  }
+  return {.select =
+              [target_fps = target_fps_,
+               temporal_patch_size =
+                   video_temporal_patch_size_](const VideoMetadata& metadata) {
+                return sample_fixed_video_indices(
+                    metadata, target_fps, temporal_patch_size);
+              },
+          .apply_display_rotation = true,
+          .match_opencv_rgb = true};
+}
+
 torch::Tensor Glm4VVideoProcessor::sample_frames(
     const VideoMetadata& metadata) const {
+  if (sampling_mode_ == SamplingMode::FIXED_FPS) {
+    return torch::tensor(sample_fixed_video_indices(
+                             metadata, target_fps_, video_temporal_patch_size_),
+                         torch::kLong);
+  }
   const int32_t total_frames = metadata.total_num_frames;
   if (total_frames <= 0) {
     return torch::empty({0}, torch::dtype(torch::kLong));
@@ -215,30 +304,16 @@ torch::Tensor Glm4VVideoProcessor::sample_frames(
         std::round(static_cast<double>(max_frame_idx) / metadata.fps) + 1.0;
   }
 
-  double target_fps = target_fps_;
-  int32_t extract_t = 0;
-  if (sampling_mode_ == SamplingMode::FIXED_FPS) {
-    constexpr int32_t kMaxFrameCount = 2048;
-    extract_t =
-        std::min(static_cast<int32_t>(duration * target_fps), kMaxFrameCount);
-    extract_t = std::max(extract_t, 1);
-  } else {
-    // Preserve the existing duration-dependent sampling policy.
-    constexpr double kMaxDuration = 2400.0;
-    constexpr int32_t kMaxFrameCount = 640;
-    const double effective_duration = std::min(duration, kMaxDuration);
-    if (effective_duration <= 30.0) {
-      target_fps = 3.0;
-    } else if (effective_duration <= 300.0) {
-      target_fps = 1.0;
-    } else {
-      target_fps = 0.5;
-    }
-    extract_t = std::min(
-        static_cast<int32_t>(effective_duration * target_fps *
-                             static_cast<double>(video_temporal_patch_size_)),
-        kMaxFrameCount);
-  }
+  constexpr double kMaxDuration = 2400.0;
+  constexpr int32_t kMaxFrameCount = 640;
+  const double effective_duration = std::min(duration, kMaxDuration);
+  const double target_fps = effective_duration <= 30.0    ? 3.0
+                            : effective_duration <= 300.0 ? 1.0
+                                                          : 0.5;
+  const int32_t extract_t = std::min(
+      static_cast<int32_t>(effective_duration * target_fps *
+                           static_cast<double>(video_temporal_patch_size_)),
+      kMaxFrameCount);
 
   const double duration_per_frame = 1.0 / metadata.fps;
   std::vector<double> timestamps(total_frames);
@@ -250,17 +325,8 @@ torch::Tensor Glm4VVideoProcessor::sample_frames(
   torch::Tensor frame_indices;
 
   if (total_frames < extract_t) {
-    if (sampling_mode_ == SamplingMode::FIXED_FPS) {
-      std::vector<int64_t> indices;
-      indices.reserve(extract_t);
-      for (int64_t i = 0; i < extract_t; ++i) {
-        indices.push_back(i * total_frames / extract_t);
-      }
-      frame_indices = torch::tensor(indices, torch::dtype(torch::kLong));
-    } else {
-      frame_indices = torch::linspace(
-          0, total_frames - 1, extract_t, torch::dtype(torch::kLong));
-    }
+    frame_indices = torch::linspace(
+        0, total_frames - 1, extract_t, torch::dtype(torch::kLong));
   } else {
     std::vector<int64_t> tmp;
     tmp.reserve(static_cast<size_t>(total_frames));
@@ -344,15 +410,33 @@ bool Glm4VVideoProcessor::process_video(const torch::Tensor& origin_video,
   }
 
   torch::Tensor indices;
-  if (do_sample_frame_) {
+  torch::Tensor video;
+  const bool match_va = sampling_mode_ == SamplingMode::FIXED_FPS;
+  if (metadata.frames_preselected) {
+    if (!metadata.frame_indices.defined() ||
+        metadata.frame_indices.numel() != origin_video.size(0) ||
+        origin_video.size(0) == 0) {
+      return false;
+    }
+    indices = metadata.frame_indices;
+    video = origin_video;
+  } else if (do_sample_frame_) {
     indices = sample_frames(metadata);
   } else {
     indices = torch::arange(0,
                             static_cast<int64_t>(origin_video.size(0)),
                             torch::TensorOptions().dtype(torch::kLong));
   }
-  auto video = origin_video.index_select(/*dim=*/0, indices);
-  int64_t sampled_total_frames = video.size(0);
+  if (!video.defined()) {
+    video = origin_video.index_select(/*dim=*/0, indices);
+  }
+  if (video.size(0) == 0) {
+    return false;
+  }
+  if (match_va && indices.size(0) % 2 != 0) {
+    indices = torch::cat({indices, indices.slice(0, -1)}, 0);
+  }
+  const int64_t sampled_total_frames = indices.size(0);
 
   metadata.frame_indices = indices;
   metadata.timestamps.clear();
@@ -379,13 +463,18 @@ bool Glm4VVideoProcessor::process_video(const torch::Tensor& origin_video,
   if (do_resize_) {
     std::optional<Size> size;
     if (video_min_tokens_ > 0 && video_max_tokens_ > 0) {
+      constexpr int32_t kVaMaxVideoTokens = 30000;
+      const int32_t max_tokens =
+          match_va ? std::min(video_max_tokens_, kVaMaxVideoTokens)
+                   : video_max_tokens_;
       size = smart_resize_tokens(time_len,
                                  resized_height,
                                  resized_width,
                                  video_temporal_patch_size_,
                                  video_patch_size_ * video_merge_size_,
                                  video_min_tokens_,
-                                 video_max_tokens_);
+                                 max_tokens,
+                                 match_va);
     } else {
       size = smart_resize(time_len,
                           resized_height,
@@ -403,8 +492,34 @@ bool Glm4VVideoProcessor::process_video(const torch::Tensor& origin_video,
 
   auto out_video = video;
   if (do_resize_) {
-    out_video = transforms::resize(
-        out_video, {resized_height, resized_width}, resample_, true);
+    int64_t content_height = resized_height;
+    int64_t content_width = resized_width;
+    if (match_va) {
+      const int64_t factor = video_patch_size_ * video_merge_size_;
+      const int64_t min_pixels =
+          video_min_tokens_ > 0 && video_max_tokens_ > 0
+              ? video_min_tokens_ * video_temporal_patch_size_ * factor * factor
+              : video_min_pixels_;
+      double scale = std::min(static_cast<double>(resized_height) / shape[2],
+                              static_cast<double>(resized_width) / shape[3]);
+      if (time_len * shape[2] * shape[3] >= min_pixels) {
+        scale = std::min(1.0, scale);
+      }
+      content_height = std::clamp<int64_t>(shape[2] * scale, 1, resized_height);
+      content_width = std::clamp<int64_t>(shape[3] * scale, 1, resized_width);
+    }
+    if (!match_va || content_height != shape[2] || content_width != shape[3]) {
+      out_video = transforms::resize(
+          out_video, {content_height, content_width}, resample_, true);
+    }
+    if (match_va &&
+        (content_height != resized_height || content_width != resized_width)) {
+      out_video = torch::constant_pad_nd(out_video,
+                                         {0,
+                                          resized_width - content_width,
+                                          0,
+                                          resized_height - content_height});
+    }
   }
   if (do_normalize_) {
     out_video = transforms::normalize(

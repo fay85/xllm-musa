@@ -54,6 +54,8 @@ class Qwen2VLImageProcessor final : public ImageProcessor {
   torch::Tensor image_mean_;
   torch::Tensor image_std_;
 
+  bool use_glm_image_padding_ = false;
+
   int32_t min_tokens_ = 0;
   int32_t max_tokens_ = 0;
 

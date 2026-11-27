@@ -194,5 +194,18 @@ TEST(ResizePilBicubicTest, RejectsNonPositiveOutputDims) {
   EXPECT_DEATH(resize_pil_bicubic(input, 4, 0), "positive output width");
 }
 
+TEST(ResizeTest, Uint8BicubicSaturatesHighContrastEdges) {
+  const auto input = torch::tensor({0, 0, 255, 255}, torch::kUInt8)
+                         .reshape({1, 1, 4})
+                         .repeat({1, 4, 1});
+  for (const bool antialias : {false, true}) {
+    SCOPED_TRACE(antialias);
+    const auto output = resize(input, {4, 16}, 3, antialias);
+    ASSERT_EQ(output.scalar_type(), torch::kUInt8);
+    EXPECT_EQ(output[0][0][4].item<int32_t>(), 0);
+    EXPECT_EQ(output[0][0][11].item<int32_t>(), 255);
+  }
+}
+
 }  // namespace
 }  // namespace xllm::transforms

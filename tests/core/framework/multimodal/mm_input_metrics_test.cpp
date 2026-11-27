@@ -20,6 +20,7 @@ limitations under the License.
 #include <vector>
 
 #include "core/common/metrics.h"
+#include "core/framework/multimodal/mm_codec.h"
 #include "core/framework/multimodal/mm_handler.h"
 #include "core/framework/multimodal/mm_input.h"
 
@@ -30,6 +31,39 @@ constexpr char kTinyPngDataUrl[] =
     "data:image/png;base64,"
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVQIHWP4z8AAAAMB"
     "AQBb2/lEAAAAAElFTkSuQmCC";
+
+TEST(MMInputMetricsTest, SampledVideoBudgetFollowsTensorStorageLifetime) {
+  const auto video = torch::zeros({4, 3, 32, 32}, torch::kUInt8);
+  constexpr uint64_t kBudget = 2 * 3 * 32 * 32;
+  std::string bytes;
+  ASSERT_TRUE(FFmpegVideoEncoder().encode(video, 4.0, "mp4", bytes));
+  const VideoFrameSelector selector{.select = [](const VideoMetadata&) {
+    return std::vector<int64_t>{0, 3};
+  }};
+  using Status = SampledVideoDecodeStatus;
+  FFmpegVideoDecoder decoder;
+  VideoMetadata metadata;
+  torch::Tensor first;
+  torch::Tensor second;
+  EXPECT_EQ(decoder.decode_sampled(
+                bytes, selector, first, metadata, kBudget - 1, kBudget),
+            Status::VIDEO_LIMIT);
+  EXPECT_FALSE(first.defined());
+  ASSERT_EQ(decoder.decode_sampled(
+                bytes, selector, first, metadata, kBudget, kBudget),
+            Status::SUCCESS);
+
+  auto view = first[0];
+  first.reset();
+  EXPECT_EQ(decoder.decode_sampled(
+                bytes, selector, second, metadata, kBudget, kBudget),
+            Status::BUSY);
+  EXPECT_FALSE(second.defined());
+  view.reset();
+  EXPECT_EQ(decoder.decode_sampled(
+                bytes, selector, second, metadata, kBudget, kBudget),
+            Status::SUCCESS);
+}
 
 struct ItemCounts {
   double success;

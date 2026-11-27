@@ -42,8 +42,8 @@ bool MMInput::foreach (MMInputItem::IVisitor& v) const {
   return true;
 }
 
-MMInputTransfer::MMInputTransfer() {
-  mm_handlers_ = std::make_unique<MMHandlerSet>();
+MMInputTransfer::MMInputTransfer(const VideoFrameSelector& select_frames) {
+  mm_handlers_ = std::make_unique<MMHandlerSet>(select_frames);
   threadpool_ = std::make_unique<ThreadPool>(/*num_threads=*/16,
                                              /*cpu_binding=*/false,
                                              /*name=*/"MMInputTransfer");

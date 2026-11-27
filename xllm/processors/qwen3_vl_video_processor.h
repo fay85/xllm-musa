@@ -24,17 +24,22 @@ limitations under the License.
 
 #include "core/framework/model/model_args.h"
 #include "core/framework/multimodal/mm_input.h"
+#include "processors/processor_config.h"
 #include "processors/video_processor.h"
 
 namespace xllm {
 
 class Qwen3VLVideoProcessor final : public VideoProcessor {
  public:
-  explicit Qwen3VLVideoProcessor(const ModelArgs& args);
+  explicit Qwen3VLVideoProcessor(
+      const ModelArgs& args,
+      const ProcessorConfig& config = ProcessorConfig());
 
   bool process(const torch::Tensor& origin_video,
                const VideoMetadata& metadata,
                MMDataItem& output_item) const override;
+
+  VideoFrameSelector video_frame_selector() const override;
 
  private:
   bool process_video(const torch::Tensor& origin_video,
@@ -42,11 +47,10 @@ class Qwen3VLVideoProcessor final : public VideoProcessor {
                      torch::Tensor& pixel_values,
                      torch::Tensor& thw) const;
 
-  torch::Tensor sample_frames(const VideoMetadata& metadata,
-                              int32_t min_frames,
-                              int32_t max_frames,
-                              int32_t num_frames = -1,
-                              double set_fps = -1.0) const;
+  static torch::Tensor sample_frames(const VideoMetadata& metadata,
+                                     int32_t min_frames,
+                                     int32_t max_frames,
+                                     bool match_va);
 
  private:
   bool do_convert_rgb_ = true;
@@ -67,6 +71,7 @@ class Qwen3VLVideoProcessor final : public VideoProcessor {
   int32_t temporal_patch_size_ = 2;
 
   bool do_sample_frame_ = true;
+  const bool enable_sampled_decode_;
   int32_t min_frames_ = 4;
   int32_t max_frames_ = 768;
 };

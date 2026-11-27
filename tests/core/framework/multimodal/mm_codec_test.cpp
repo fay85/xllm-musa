@@ -57,5 +57,55 @@ TEST(FFmpegVideoDecoderTest, RejectsFramesWithDifferentShapes) {
   EXPECT_EQ(metadata.total_num_frames, 0);
 }
 
+TEST(FFmpegVideoDecoderTest, SamplesMjpegWithoutFrameCountMetadata) {
+  const std::string video = make_mjpeg_video({{16, 16}, {16, 16}, {16, 16}});
+  const VideoFrameSelector selector{.select =
+                                        [](const VideoMetadata& metadata) {
+                                          return std::vector<int64_t>{
+                                              0, metadata.total_num_frames - 1};
+                                        },
+                                    .match_opencv_rgb = true};
+  constexpr uint64_t kTwoFramesBytes = 2 * 3 * 16 * 16;
+  using Status = SampledVideoDecodeStatus;
+  FFmpegVideoDecoder decoder;
+  torch::Tensor frames;
+  VideoMetadata metadata;
+
+  EXPECT_EQ(decoder.decode_sampled(video,
+                                   selector,
+                                   frames,
+                                   metadata,
+                                   kTwoFramesBytes,
+                                   kTwoFramesBytes - 1),
+            Status::VIDEO_LIMIT);
+  EXPECT_FALSE(frames.defined());
+
+  ASSERT_EQ(
+      decoder.decode_sampled(
+          video, selector, frames, metadata, kTwoFramesBytes, kTwoFramesBytes),
+      Status::SUCCESS);
+  EXPECT_EQ(frames.sizes(), (std::vector<int64_t>{2, 3, 16, 16}));
+  EXPECT_EQ(metadata.total_num_frames, 3);
+  EXPECT_TRUE(torch::equal(metadata.frame_indices, torch::tensor({0, 2})));
+}
+
+TEST(FFmpegVideoDecoderTest, RejectsShapeChangesInUnselectedFrames) {
+  const std::string video = make_mjpeg_video({{16, 16}, {32, 16}, {16, 16}});
+  const VideoFrameSelector selector{.select = [](const VideoMetadata&) {
+    return std::vector<int64_t>{0, 2};
+  }};
+  constexpr uint64_t kTwoFramesBytes = 2 * 3 * 16 * 16;
+  using Status = SampledVideoDecodeStatus;
+  FFmpegVideoDecoder decoder;
+  torch::Tensor frames;
+  VideoMetadata metadata;
+
+  EXPECT_EQ(
+      decoder.decode_sampled(
+          video, selector, frames, metadata, kTwoFramesBytes, kTwoFramesBytes),
+      Status::DECODE_ERROR);
+  EXPECT_FALSE(frames.defined());
+}
+
 }  // namespace
 }  // namespace xllm

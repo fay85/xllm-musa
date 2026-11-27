@@ -17,8 +17,9 @@ limitations under the License.
 
 #include <algorithm>
 
-#include "framework/parallel_state/parallel_state.h"
 #if defined(USE_NPU)
+#include <torch_npu/csrc/aten/CustomFunctions.h>
+
 #include "kernels/npu/npu_ops_api.h"
 #endif
 #if defined(USE_MLU)
@@ -44,7 +45,8 @@ Qwen2VisionAttentionImpl::Qwen2VisionAttentionImpl(const ModelContext& context,
   tp_group_ = parallel_args.tp_group_;
   hidden_size_per_attention_head_ = args.mm_head_dim();
   num_attention_heads_per_partition_ = num_heads / tp_size;
-  scale_ = 1.0 / std::sqrt(static_cast<float>(hidden_size_per_attention_head_));
+  scale_ =
+      1.0 / std::sqrt(static_cast<double>(hidden_size_per_attention_head_));
 
   qkv_proj_ =
       register_module("qkv_proj",
@@ -69,9 +71,10 @@ Qwen2VisionAttentionImpl::Qwen2VisionAttentionImpl(const ModelContext& context,
                                             parallel_args.tp_group_,
                                             options));
 #if defined(USE_NPU)
-  // currently only atb rope operation supports the head_dim=72,
-  // aclnn rope operation only supports head_dim=64 or 128
-  rope_layer_ = register_module("rope", NpuRopeLayer(context));
+  // RotaryMul supports Qwen3's 72-wide heads without the ATB setup path.
+  if (hidden_size_per_attention_head_ != 72) {
+    rope_layer_ = register_module("rope", NpuRopeLayer(context));
+  }
 #endif
 }
 
@@ -80,21 +83,12 @@ std::vector<torch::Tensor> Qwen2VisionAttentionImpl::split_qkv(
   // [s, b, 3 * head * head_dim]
   const int64_t seq_len = qkv.size(0);
   const int64_t bs = qkv.dim() == 3 ? qkv.size(1) : 1;
-  torch::Tensor qkv_gathered =
-      xllm::parallel_state::all_gather_interleaved(qkv, tp_group_);
-
-  // [s, b, 3 * head * head_dim] -> 3 * [s, b, head * head_dim]
-  auto qkv_chunks = qkv_gathered.chunk(3, /*dim=*/-1);
+  // QKVParallelLinear already stores [Q_rank, K_rank, V_rank]. Gathering
+  // every rank only to scatter each component returns these same shards.
+  auto qkv_chunks = qkv.chunk(3, /*dim=*/-1);
   auto q = qkv_chunks[0];
   auto k = qkv_chunks[1];
   auto v = qkv_chunks[2];
-
-  // 3 * [s, b, head * head_dim]
-  if (tp_group_->world_size() > 1) {
-    q = xllm::parallel_state::scatter(q, tp_group_);
-    k = xllm::parallel_state::scatter(k, tp_group_);
-    v = xllm::parallel_state::scatter(v, tp_group_);
-  }
 
   // 3 * [s, b, head * head_dim] -> 3 * [s, b, head, head_dim]
   std::vector<int64_t> new_shape = {seq_len,
@@ -184,7 +178,7 @@ void compute_qwen_vision_attention_fused(
     const torch::Tensor& value,
     torch::Tensor& output,
     const std::vector<int32_t>& cu_seq_len_vec,
-    float scale) {
+    double scale) {
   CHECK_GE(cu_seq_len_vec.size(), static_cast<size_t>(2));
   CHECK_EQ(cu_seq_len_vec.front(), 0);
 
@@ -195,10 +189,26 @@ void compute_qwen_vision_attention_fused(
     actual_seq_lengths.emplace_back(cu_seq_len_vec[index]);
   }
 
+  // Ascend FIA runs faster with a 128-wide head than with an unaligned
+  // head between 64 and 128. Preserve the original attention scale and
+  // discard the padded output channels, as in the VA encoder.
+  const int64_t head_dim = query.size(-1);
+  const int64_t padded_head_dim = 128;
+  const bool pad_head = head_dim > 64 && head_dim < padded_head_dim;
+  auto query_input = query;
+  auto key_input = key;
+  auto value_input = value;
+  if (pad_head) {
+    const std::vector<int64_t> padding{0, padded_head_dim - head_dim};
+    query_input = torch::constant_pad_nd(query, padding, 0);
+    key_input = torch::constant_pad_nd(key, padding, 0);
+    value_input = torch::constant_pad_nd(value, padding, 0);
+  }
+
   auto attention_result =
-      xllm::kernel::npu::npu_fused_infer_attention(query,
-                                                   key,
-                                                   value,
+      xllm::kernel::npu::npu_fused_infer_attention(query_input,
+                                                   key_input,
+                                                   value_input,
                                                    /*atten_mask=*/std::nullopt,
                                                    /*block_table=*/std::nullopt,
                                                    actual_seq_lengths,
@@ -206,12 +216,14 @@ void compute_qwen_vision_attention_fused(
                                                    query.size(1),
                                                    key.size(1),
                                                    scale,
-                                                   /*block_size=*/0,
+                                                   /*block_size=*/128,
                                                    /*sparse_mode=*/0,
                                                    "TND",
                                                    /*softmax_lse_flag=*/false,
                                                    /*is_causal=*/false);
-  output.copy_(std::get<0>(attention_result).view_as(output));
+  output.copy_(std::get<0>(attention_result)
+                   .slice(/*dim=*/-1, /*start=*/0, /*end=*/head_dim)
+                   .view_as(output));
 }
 #endif  // defined(USE_NPU)
 
@@ -249,14 +261,24 @@ torch::Tensor Qwen2VisionAttentionImpl::forward(
 
   // Apply rotary position embedding to both q and k in a single call.
 #if defined(USE_NPU)
-  auto q_atb = q.reshape({B * S, -1});
-  auto k_atb = k.reshape({B * S, -1});
-  auto rotary_result = rope_layer_->forward(
-      q_atb, k_atb, m_cos_pos, m_sin_pos, cu_seq_len, cu_seq_len_vec);
-  q = std::get<0>(rotary_result)
-          .reshape({B * S, num_attention_heads_per_partition_, head_dim});
-  k = std::get<1>(rotary_result)
-          .reshape({B * S, num_attention_heads_per_partition_, head_dim});
+  if (head_dim == 72) {
+    auto qk = torch::stack({q, k}, /*dim=*/0);
+    auto rotated = at_npu::native::custom_ops::npu_rotary_mul(
+        qk,
+        m_cos_pos.reshape({1, B * S, 1, head_dim}),
+        m_sin_pos.reshape({1, B * S, 1, head_dim}));
+    q = rotated.select(/*dim=*/0, /*index=*/0);
+    k = rotated.select(/*dim=*/0, /*index=*/1);
+  } else {
+    auto q_atb = q.reshape({B * S, -1});
+    auto k_atb = k.reshape({B * S, -1});
+    auto rotary_result = rope_layer_->forward(
+        q_atb, k_atb, m_cos_pos, m_sin_pos, cu_seq_len, cu_seq_len_vec);
+    q = std::get<0>(rotary_result)
+            .reshape({B * S, num_attention_heads_per_partition_, head_dim});
+    k = std::get<1>(rotary_result)
+            .reshape({B * S, num_attention_heads_per_partition_, head_dim});
+  }
 #else
   // NOTE: Do NOT call apply_rotary twice; the first call already handles both
   // q and k. A second call would incorrectly apply RoPE to k a second time.

@@ -52,7 +52,7 @@ class Qwen2VisionAttentionImpl : public torch::nn::Module {
 
   int64_t hidden_size_per_attention_head_;
   int64_t num_attention_heads_per_partition_;
-  float scale_;
+  double scale_;
 
   ProcessGroup* tp_group_;
 

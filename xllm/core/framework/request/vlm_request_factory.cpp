@@ -122,7 +122,9 @@ VLMRequestFactory::VLMRequestFactory(MultimodalProcessorBase* processor,
       tokenizer_(tokenizer),
       model_args_(model_args),
       options_(options),
-      rate_limiter_(rate_limiter) {
+      rate_limiter_(rate_limiter),
+      mm_input_transfer_(processor ? processor->video_frame_selector()
+                                   : VideoFrameSelector{}) {
   CHECK(processor_ != nullptr);
   CHECK(chat_template_ != nullptr);
   CHECK(tokenizer_ != nullptr);
@@ -152,14 +154,13 @@ Status VLMRequestFactory::preprocess(PreparedMultimodalInput& input) const {
 Status VLMRequestFactory::process_media(const std::vector<Message>& messages,
                                         BinaryPayload payload,
                                         MMData& mm_data) const {
-  static MMInputTransfer mm_input_transfer;
   const bool has_mm_content =
       std::any_of(messages.begin(), messages.end(), [](const Message& message) {
         return message.has_mm_content();
       });
   MMInput mm_inputs(std::move(payload));
   Timer transfer_timer;
-  const MMErrCode code = mm_input_transfer.trans(messages, mm_inputs);
+  const MMErrCode code = mm_input_transfer_.trans(messages, mm_inputs);
   if (has_mm_content) {
     HISTOGRAM_OBSERVE(
         mm_transfer_latency_milliseconds,
@@ -171,6 +172,11 @@ Status VLMRequestFactory::process_media(const std::vector<Message>& messages,
   if (code != MMErrCode::SUCCESS) {
     const std::string error_message = MMErrToString(code);
     LOG(ERROR) << error_message;
+    if (code == MMErrCode::VIDEO_DECODE_BUSY) {
+      return {StatusCode::RESOURCE_EXHAUSTED,
+              error_message,
+              FailureReason::TEMPORARY_OVERLOAD};
+    }
     return {StatusCode::INVALID_ARGUMENT, error_message};
   }
   if (!mm_inputs.empty()) {

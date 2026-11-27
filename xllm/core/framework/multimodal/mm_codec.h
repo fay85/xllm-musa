@@ -59,12 +59,26 @@ class OpenCVImageEncoder {
   bool valid(const torch::Tensor& t);
 };
 
+enum class SampledVideoDecodeStatus {
+  SUCCESS,
+  DECODE_ERROR,
+  VIDEO_LIMIT,
+  BUSY
+};
+
 class FFmpegVideoDecoder {
  public:
   FFmpegVideoDecoder() = default;
   ~FFmpegVideoDecoder() = default;
 
   bool decode(std::string_view raw_data, torch::Tensor& t, VideoMetadata& meta);
+  SampledVideoDecodeStatus decode_sampled(
+      std::string_view raw_data,
+      const VideoFrameSelector& select_frames,
+      torch::Tensor& tensor,
+      VideoMetadata& metadata,
+      uint64_t max_video_bytes,
+      uint64_t max_total_bytes);
 };
 
 class FFmpegAudioDecoder {

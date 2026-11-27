@@ -27,6 +27,7 @@ limitations under the License.
 #include "common/options.h"
 #include "common/rate_limiter.h"
 #include "core/framework/multimodal/mm_data.h"
+#include "core/framework/multimodal/mm_input.h"
 #include "core/framework/request/structured_output_compiler.h"
 #include "core/util/binary_payload.h"
 #include "framework/chat_template/chat_template.h"
@@ -128,7 +129,7 @@ class VLMRequestFactory final {
   const ModelArgs* model_args_ = nullptr;
   const Options* options_ = nullptr;
   RateLimiter* rate_limiter_ = nullptr;
-
+  mutable MMInputTransfer mm_input_transfer_;
   std::unique_ptr<StructuredOutputCompiler> structured_output_;
 };
 

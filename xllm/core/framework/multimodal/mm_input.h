@@ -121,6 +121,8 @@ enum class MMErrCode : uint8_t {
   PARSE_EMB_ERR = 5,
   DECODE_ERR = 6,
   HANDLER_ERR = 7,
+  VIDEO_DECODE_LIMIT = 8,
+  VIDEO_DECODE_BUSY = 9,
 };
 
 inline const char* MMErrToString(MMErrCode code) {
@@ -135,6 +137,10 @@ inline const char* MMErrToString(MMErrCode code) {
       return "Failed to parse input multimodal embedding.";
     case MMErrCode::DECODE_ERR:
       return "Failed to decode multimodal input.";
+    case MMErrCode::VIDEO_DECODE_LIMIT:
+      return "Sampled video exceeds the per-video RGB decode budget.";
+    case MMErrCode::VIDEO_DECODE_BUSY:
+      return "Sampled video RGB decode budget is busy; retry later.";
     case MMErrCode::INVALID_URL_ERR:
       return "Multimodal input url must be data URL (base64 or binary) / "
              "http(s) URL / local file URL.";
@@ -149,7 +155,7 @@ class MMHandlerSet;
 class ThreadPool;
 class MMInputTransfer {
  public:
-  MMInputTransfer();
+  explicit MMInputTransfer(const VideoFrameSelector& select_frames = {});
   ~MMInputTransfer();
 
   MMErrCode trans(const std::vector<Message>& messages, MMInput& inputs);

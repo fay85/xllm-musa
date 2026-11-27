@@ -200,6 +200,9 @@ MMErrCode ImageHandler::decode(MMInputItem& input) {
   return MMErrCode::SUCCESS;
 }
 
+VideoHandler::VideoHandler(VideoFrameSelector select_frames)
+    : select_frames_(std::move(select_frames)) {}
+
 MMErrCode VideoHandler::load(const MMContent& content,
                              MMInputItem& input,
                              const BinaryPayload& payload) {
@@ -250,10 +253,30 @@ MMErrCode VideoHandler::decode(MMInputItem& input) {
   }
 
   FFmpegVideoDecoder decoder;
-  if (!decoder.decode(input.raw_data, input.decode_video, input.video_meta)) {
-    return MMErrCode::DECODE_ERR;
+  if (!select_frames_) {
+    return decoder.decode(input.raw_data, input.decode_video, input.video_meta)
+               ? MMErrCode::SUCCESS
+               : MMErrCode::DECODE_ERR;
   }
-  return MMErrCode::SUCCESS;
+  constexpr uint64_t kBytesPerMib = 1024 * 1024;
+  const auto& config = MultimodalConfig::get_instance();
+  switch (
+      decoder.decode_sampled(input.raw_data,
+                             select_frames_,
+                             input.decode_video,
+                             input.video_meta,
+                             config.video_decode_max_mib() * kBytesPerMib,
+                             config.video_decode_total_mib() * kBytesPerMib)) {
+    case SampledVideoDecodeStatus::SUCCESS:
+      return MMErrCode::SUCCESS;
+    case SampledVideoDecodeStatus::VIDEO_LIMIT:
+      return MMErrCode::VIDEO_DECODE_LIMIT;
+    case SampledVideoDecodeStatus::BUSY:
+      return MMErrCode::VIDEO_DECODE_BUSY;
+    case SampledVideoDecodeStatus::DECODE_ERROR:
+      return MMErrCode::DECODE_ERR;
+  }
+  return MMErrCode::DECODE_ERR;
 }
 
 MMErrCode AudioHandler::load(const MMContent& content,
@@ -295,12 +318,12 @@ MMErrCode AudioHandler::decode(MMInputItem& input) {
   return MMErrCode::SUCCESS;
 }
 
-MMHandlerSet::MMHandlerSet() {
+MMHandlerSet::MMHandlerSet(const VideoFrameSelector& select_frames) {
   handlers_["image"] = std::make_unique<ImageHandler>();
-  handlers_["video"] = std::make_unique<VideoHandler>();
+  handlers_["video"] = std::make_unique<VideoHandler>(select_frames);
   handlers_["audio"] = std::make_unique<AudioHandler>();
   handlers_["image_url"] = std::make_unique<ImageHandler>();
-  handlers_["video_url"] = std::make_unique<VideoHandler>();
+  handlers_["video_url"] = std::make_unique<VideoHandler>(select_frames);
   handlers_["audio_url"] = std::make_unique<AudioHandler>();
   handlers_["image_embedding"] =
       std::make_unique<MMEmbeddingHandler>(MMType::IMAGE);

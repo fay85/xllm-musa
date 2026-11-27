@@ -41,6 +41,8 @@ class Glm4VVideoProcessor : public VideoProcessor {
                const VideoMetadata& metadata,
                MMDataItem& output_item) const override;
 
+  VideoFrameSelector video_frame_selector() const override;
+
  private:
   bool process_video(const torch::Tensor& origin_video,
                      VideoMetadata& metadata,

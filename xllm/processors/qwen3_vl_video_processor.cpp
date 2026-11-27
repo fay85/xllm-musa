@@ -34,11 +34,17 @@ std::optional<Size> smart_resize(int32_t num_frames,
                                  int32_t temporal_factor,
                                  int32_t factor,
                                  int32_t min_pixels,
-                                 int32_t max_pixels) {
+                                 int32_t max_pixels,
+                                 bool match_va) {
   if (height < factor || width < factor) {
-    LOG(ERROR) << "height:" << height << " or width:" << width
-               << " must be larger than factor:" << factor;
-    return std::nullopt;
+    if (!match_va || height <= 0 || width <= 0) {
+      LOG(ERROR) << "height:" << height << " or width:" << width
+                 << " must be larger than factor:" << factor;
+      return std::nullopt;
+    }
+    const double scale = static_cast<double>(factor) / std::min(height, width);
+    height = static_cast<int32_t>(height * scale);
+    width = static_cast<int32_t>(width * scale);
   }
   if (static_cast<double>(std::max(height, width)) / std::min(height, width) >
       200.0) {
@@ -53,9 +59,12 @@ std::optional<Size> smart_resize(int32_t num_frames,
   int32_t w_bar =
       static_cast<int32_t>(std::rint(width / static_cast<double>(factor))) *
       factor;
-  int32_t t_bar = static_cast<int32_t>(std::ceil(
-                      num_frames / static_cast<double>(temporal_factor))) *
-                  temporal_factor;
+  const double temporal_grid =
+      num_frames / static_cast<double>(temporal_factor);
+  const int32_t t_bar =
+      static_cast<int32_t>(match_va ? std::rint(temporal_grid)
+                                    : std::ceil(temporal_grid)) *
+      temporal_factor;
 
   const double thw_bar = static_cast<double>(t_bar) *
                          static_cast<double>(h_bar) *
@@ -90,8 +99,13 @@ std::optional<Size> smart_resize(int32_t num_frames,
 
 }  // namespace
 
-Qwen3VLVideoProcessor::Qwen3VLVideoProcessor(const ModelArgs& args)
-    : VideoProcessor(args) {
+Qwen3VLVideoProcessor::Qwen3VLVideoProcessor(const ModelArgs& args,
+                                             const ProcessorConfig& config)
+    : VideoProcessor(args),
+      enable_sampled_decode_(config.value("video.enable_sampled_decode",
+                                          args.model_type() == "qwen3_vl" &&
+                                              args.hidden_size() == 5120 &&
+                                              args.n_layers() == 64)) {
   image_mean_ = torch::tensor(args.mm_image_normalize_mean(),
                               torch::dtype(torch::kFloat32));
   image_std_ = torch::tensor(args.mm_image_normalize_std(),
@@ -100,6 +114,31 @@ Qwen3VLVideoProcessor::Qwen3VLVideoProcessor(const ModelArgs& args)
   temporal_patch_size_ = args.mm_image_temporal_patch_size();
   merge_size_ = args.mm_image_merge_size();
   size_ = {{"longest_edge", 12845056}, {"shortest_edge", 3136}};
+  if (enable_sampled_decode_) {
+    size_ = {{"longest_edge",
+              args.mm_video_longest_edge() > 0 ? args.mm_video_longest_edge()
+                                               : 25165824},
+             {"shortest_edge",
+              args.mm_video_shortest_edge() > 0 ? args.mm_video_shortest_edge()
+                                                : 4096}};
+    if (args.mm_video_patch_size() > 0) {
+      patch_size_ = args.mm_video_patch_size();
+    }
+    if (args.mm_video_temporal_patch_size() > 0) {
+      temporal_patch_size_ = args.mm_video_temporal_patch_size();
+    }
+    if (args.mm_video_merge_size() > 0) {
+      merge_size_ = args.mm_video_merge_size();
+    }
+    if (!args.mm_video_normalize_mean().empty()) {
+      image_mean_ =
+          torch::tensor(args.mm_video_normalize_mean(), torch::kFloat32);
+    }
+    if (!args.mm_video_normalize_std().empty()) {
+      image_std_ =
+          torch::tensor(args.mm_video_normalize_std(), torch::kFloat32);
+    }
+  }
 
   if (do_rescale_ && do_normalize_) {
     image_mean_.mul_(1.0 / rescale_factor_);
@@ -108,34 +147,54 @@ Qwen3VLVideoProcessor::Qwen3VLVideoProcessor(const ModelArgs& args)
   }
 }
 
+VideoFrameSelector Qwen3VLVideoProcessor::video_frame_selector() const {
+  if (!enable_sampled_decode_ || !do_sample_frame_) {
+    return {};
+  }
+  return {.select =
+              [min_frames = min_frames_,
+               max_frames = max_frames_](const VideoMetadata& metadata) {
+                if (metadata.total_num_frames <= 0 || !(metadata.fps > 0.0)) {
+                  return std::vector<int64_t>{};
+                }
+                const auto indices =
+                    sample_frames(metadata, min_frames, max_frames, true);
+                const int64_t* data = indices.data_ptr<int64_t>();
+                return std::vector<int64_t>(data, data + indices.numel());
+              },
+          .apply_display_rotation = true,
+          .match_opencv_rgb = true};
+}
+
 torch::Tensor Qwen3VLVideoProcessor::sample_frames(
     const VideoMetadata& metadata,
     int32_t min_frames,
     int32_t max_frames,
-    int32_t num_frames,
-    double set_fps) const {
-  if (set_fps > 0.0 && num_frames > 0) {
-    LOG(FATAL) << "num_frames and fps are mutually exclusive arguments, please "
-                  "use only one!";
+    bool match_va) {
+  CHECK_GT(metadata.fps, 0.0) << "Video FPS is required to sample frames";
+  const int32_t total_num_frames = metadata.total_num_frames;
+  if (total_num_frames <= 0) {
+    return torch::empty({0}, torch::kLong);
   }
+  constexpr double kTargetFps = 2.0;
+  const double target_count = total_num_frames / metadata.fps * kTargetFps;
+  const int32_t num_frames =
+      std::min(std::max(static_cast<int32_t>(std::min(
+                            target_count, static_cast<double>(max_frames))),
+                        min_frames),
+               std::min(max_frames, total_num_frames));
 
-  double fps = set_fps;
-  int32_t total_num_frames = metadata.total_num_frames;
-
-  if (num_frames <= 0 && fps > 0.0) {
-    if (metadata.fps <= 0.0) {
-      LOG(FATAL)
-          << "Asked to sample `fps` frames per second but no video metadata "
-             "was provided which is required when sampling with `fps`. ";
+  if (match_va) {
+    std::vector<int64_t> indices(num_frames, 0);
+    if (num_frames > 1) {
+      const double stride =
+          static_cast<double>(total_num_frames - 1) / (num_frames - 1);
+      for (int32_t index = 0; index + 1 < num_frames; ++index) {
+        indices[index] = static_cast<int64_t>(std::rint(index * stride));
+      }
+      indices.back() = total_num_frames - 1;
     }
-    num_frames = static_cast<int32_t>(static_cast<double>(total_num_frames) /
-                                      metadata.fps * fps);
-    num_frames = std::min(std::max(num_frames, min_frames),
-                          std::min(max_frames, total_num_frames));
-  }
-
-  if (num_frames <= 0) {
-    num_frames = std::min(std::max(total_num_frames, min_frames), max_frames);
+    return torch::tensor(indices, torch::kLong);
   }
 
   auto lin = torch::linspace(0.0,
@@ -179,19 +238,25 @@ bool Qwen3VLVideoProcessor::process_video(const torch::Tensor& origin_video,
   }
 
   torch::Tensor indices;
-  if (do_sample_frame_) {
-    indices = sample_frames(metadata,
-                            min_frames_,
-                            max_frames_,
-                            /*num_frames=*/-1,
-                            /*set_fps=*/2.0);
+  if (metadata.frames_preselected) {
+    if (!metadata.frame_indices.defined() ||
+        metadata.frame_indices.numel() != origin_video.size(0) ||
+        origin_video.size(0) == 0) {
+      return false;
+    }
+    indices = metadata.frame_indices;
+  } else if (do_sample_frame_) {
+    indices = sample_frames(
+        metadata, min_frames_, max_frames_, enable_sampled_decode_);
   } else {
     indices = torch::arange(0,
                             static_cast<int64_t>(origin_video.size(0)),
                             torch::TensorOptions().dtype(torch::kLong));
   }
 
-  auto video = origin_video.index_select(/*dim=*/0, indices);
+  auto video = metadata.frames_preselected
+                   ? origin_video
+                   : origin_video.index_select(/*dim=*/0, indices);
   int64_t sampled_total_frames = video.size(0);
 
   metadata.frame_indices = indices;
@@ -222,7 +287,8 @@ bool Qwen3VLVideoProcessor::process_video(const torch::Tensor& origin_video,
                              temporal_patch_size_,
                              patch_size_ * merge_size_,
                              size_.at("shortest_edge"),
-                             size_.at("longest_edge"));
+                             size_.at("longest_edge"),
+                             enable_sampled_decode_);
     if (!size) {
       return false;
     }

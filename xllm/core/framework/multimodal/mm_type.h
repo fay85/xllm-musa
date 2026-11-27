@@ -17,6 +17,7 @@ limitations under the License.
 
 #include <torch/torch.h>
 
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -65,6 +66,20 @@ struct VideoMetadata {
   double sampled_fps = 0.0;
   torch::Tensor frame_indices;
   std::vector<double> timestamps;
+  bool frames_preselected = false;
+};
+
+class VideoFrameSelector final {
+ public:
+  std::function<std::vector<int64_t>(const VideoMetadata&)> select;
+  bool apply_display_rotation = false;
+  bool match_opencv_rgb = false;
+
+  explicit operator bool() const { return static_cast<bool>(select); }
+
+  std::vector<int64_t> operator()(const VideoMetadata& metadata) const {
+    return select(metadata);
+  }
 };
 
 struct AudioMetadata {

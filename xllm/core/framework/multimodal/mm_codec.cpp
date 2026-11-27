@@ -16,15 +16,23 @@ limitations under the License.
 #include "core/framework/multimodal/mm_codec.h"
 
 #include <algorithm>
+#include <array>
+#include <atomic>
 #include <cmath>
+#include <cstring>
 #include <limits>
+#include <memory>
+#include <optional>
 #include <string_view>
 
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libavutil/channel_layout.h>
+#include <libavutil/cpu.h>
+#include <libavutil/display.h>
 #include <libavutil/opt.h>
+#include <libavutil/pixdesc.h>
 #include <libavutil/samplefmt.h>
 #include <libswresample/swresample.h>
 #include <libswscale/swscale.h>
@@ -284,6 +292,107 @@ void convert_decoded_image_to_rgb(const cv::Mat& image, cv::Mat& rgb_image) {
   }
 }
 
+bool use_neon_rgba_for_video(const AVFrame& frame) {
+#if defined(__aarch64__) && LIBSWSCALE_VERSION_MAJOR == 7
+  return (av_get_cpu_flags() & AV_CPU_FLAG_NEON) &&
+         frame.format == AV_PIX_FMT_YUV420P &&
+         frame.color_range != AVCOL_RANGE_JPEG && frame.width % 16 == 0 &&
+         frame.height % 2 == 0;
+#else
+  return false;
+#endif
+}
+
+struct VideoColorConversion {
+  int32_t width;
+  int32_t height;
+  AVPixelFormat input;
+  AVPixelFormat output;
+  AVColorSpace colorspace;
+  AVColorRange range;
+  AVChromaLocation chroma;
+
+  bool operator==(const VideoColorConversion&) const = default;
+};
+
+SwsContext* make_opencv_color_context(const VideoColorConversion& color) {
+  const auto* desc = av_pix_fmt_desc_get(color.input);
+  if (!desc) {
+    return nullptr;
+  }
+  auto* context = sws_alloc_context();
+  if (!context) {
+    return nullptr;
+  }
+  const auto chroma = color.chroma == AVCHROMA_LOC_UNSPECIFIED
+                          ? AVCHROMA_LOC_CENTER
+                          : color.chroma;
+  int32_t chroma_x = 0;
+  int32_t chroma_y = 0;
+  if (av_chroma_location_enum_to_pos(&chroma_x, &chroma_y, chroma) == 0) {
+    av_opt_set_int(context,
+                   "src_h_chr_pos",
+                   chroma_x * ((1 << desc->log2_chroma_w) - 1),
+                   0);
+    av_opt_set_int(context,
+                   "src_v_chr_pos",
+                   chroma_y * ((1 << desc->log2_chroma_h) - 1),
+                   0);
+  }
+  av_opt_set_int(context, "srcw", color.width, 0);
+  av_opt_set_int(context, "srch", color.height, 0);
+  av_opt_set_int(context, "dstw", color.width, 0);
+  av_opt_set_int(context, "dsth", color.height, 0);
+  av_opt_set_pixel_fmt(context, "src_format", color.input, 0);
+  av_opt_set_pixel_fmt(context, "dst_format", color.output, 0);
+  const bool full_range = color.range == AVCOL_RANGE_JPEG;
+  av_opt_set_int(context, "src_range", full_range, 0);
+  av_opt_set_int(context, "sws_flags", SWS_BICUBIC, 0);
+  if (sws_init_context(context, nullptr, nullptr) < 0 ||
+      sws_setColorspaceDetails(context,
+                               sws_getCoefficients(color.colorspace),
+                               full_range,
+                               sws_getCoefficients(SWS_CS_DEFAULT),
+                               1,
+                               0,
+                               1 << 16,
+                               1 << 16) < 0) {
+    sws_freeContext(context);
+    return nullptr;
+  }
+  return context;
+}
+
+std::optional<cv::RotateFlags> get_video_rotation(
+    const AVCodecParameters& params) {
+  const AVPacketSideData* side_data =
+      av_packet_side_data_get(params.coded_side_data,
+                              params.nb_coded_side_data,
+                              AV_PKT_DATA_DISPLAYMATRIX);
+  std::array<int32_t, 9> matrix{};
+  if (!side_data || side_data->size < sizeof(matrix)) {
+    return std::nullopt;
+  }
+  std::memcpy(matrix.data(), side_data->data, sizeof(matrix));
+  const double angle = -av_display_rotation_get(matrix.data());
+  if (!std::isfinite(angle)) {
+    return std::nullopt;
+  }
+  switch (std::lround(angle)) {
+    case 90:
+      return cv::ROTATE_90_CLOCKWISE;
+    case -90:
+      return cv::ROTATE_90_COUNTERCLOCKWISE;
+    case -180:
+    case 180:
+      return cv::ROTATE_180;
+    default:
+      return std::nullopt;
+  }
+}
+
+std::atomic_flag parallel_video_decoder_in_use{};
+
 }  // namespace
 
 class MemoryMediaReader {
@@ -307,6 +416,9 @@ class MemoryMediaReader {
     if (codec_ctx_) {
       avcodec_free_context(&codec_ctx_);
     }
+    if (parallel_video_decode_) {
+      parallel_video_decoder_in_use.clear(std::memory_order_relaxed);
+    }
     if (fmt_ctx_) {
       avformat_close_input(&fmt_ctx_);
     }
@@ -318,7 +430,9 @@ class MemoryMediaReader {
     }
   }
 
-  bool init(AVMediaType type) {
+  bool init(AVMediaType type,
+            int32_t decoder_threads = 0,
+            bool prefer_parallel_video = false) {
     fmt_ctx_ = avformat_alloc_context();
     if (!fmt_ctx_) {
       return false;
@@ -374,6 +488,26 @@ class MemoryMediaReader {
       return false;
     }
 
+    constexpr int32_t kMaxVideoDecoderThreads = 16;
+    constexpr int64_t kMinParallelVideoPixels = 1280 * 720;
+    constexpr int64_t kMinParallelVideoFrames = 120;
+    if (prefer_parallel_video && st->nb_frames >= kMinParallelVideoFrames &&
+        static_cast<int64_t>(st->codecpar->width) * st->codecpar->height >=
+            kMinParallelVideoPixels &&
+        (codec->capabilities & AV_CODEC_CAP_FRAME_THREADS)) {
+      const int32_t thread_limit =
+          std::min<int32_t>(av_cpu_count(), kMaxVideoDecoderThreads);
+      if (thread_limit > decoder_threads) {
+        parallel_video_decode_ = !parallel_video_decoder_in_use.test_and_set(
+            std::memory_order_relaxed);
+        if (parallel_video_decode_) {
+          decoder_threads = thread_limit;
+        }
+      }
+    }
+    if (decoder_threads > 0) {
+      codec_ctx_->thread_count = decoder_threads;
+    }
     if (avcodec_parameters_to_context(codec_ctx_, st->codecpar) < 0 ||
         avcodec_open2(codec_ctx_, codec, nullptr) < 0) {
       return false;
@@ -432,7 +566,39 @@ class MemoryMediaReader {
   MemCtx mc_{nullptr, 0, 0};
   int32_t stream_index_ = -1;
   bool has_video_stream_ = false;
+  bool parallel_video_decode_ = false;
 };
+
+namespace {
+
+std::atomic<uint64_t> sampled_video_bytes{0};
+
+class SampledVideoReservation final {
+ public:
+  ~SampledVideoReservation() {
+    sampled_video_bytes.fetch_sub(bytes_, std::memory_order_relaxed);
+  }
+
+  bool acquire(uint64_t bytes, uint64_t budget) {
+    if (bytes > budget) {
+      return false;
+    }
+    uint64_t used = sampled_video_bytes.load(std::memory_order_relaxed);
+    while (used <= budget - bytes) {
+      if (sampled_video_bytes.compare_exchange_weak(
+              used, used + bytes, std::memory_order_relaxed)) {
+        bytes_ = bytes;
+        return true;
+      }
+    }
+    return false;
+  }
+
+ private:
+  uint64_t bytes_ = 0;
+};
+
+}  // namespace
 
 class MemoryVideoReader : public MemoryMediaReader {
  public:
@@ -448,8 +614,11 @@ class MemoryVideoReader : public MemoryMediaReader {
     }
   }
 
-  bool init(VideoMetadata& metadata) {
-    if (!MemoryMediaReader::init(AVMEDIA_TYPE_VIDEO)) {
+  bool init(VideoMetadata& metadata,
+            int32_t decoder_threads = 0,
+            bool prefer_parallel_video = false) {
+    if (!MemoryMediaReader::init(
+            AVMEDIA_TYPE_VIDEO, decoder_threads, prefer_parallel_video)) {
       return false;
     }
 
@@ -462,6 +631,78 @@ class MemoryVideoReader : public MemoryMediaReader {
     metadata.duration = 0.0;
     return true;
   }
+
+  int32_t frame_count_hint() const {
+    const AVStream* stream = fmt_ctx_->streams[stream_index_];
+    if (stream->nb_frames > 0 && stream->nb_frames <= INT32_MAX) {
+      return static_cast<int32_t>(stream->nb_frames);
+    }
+    return 0;
+  }
+
+  int32_t count_video_packets() {
+    int32_t count = 0;
+    int32_t result = 0;
+    while ((result = av_read_frame(fmt_ctx_, pkt_)) >= 0) {
+      const bool is_video = pkt_->stream_index == stream_index_;
+      av_packet_unref(pkt_);
+      if (!is_video) {
+        continue;
+      }
+      if (count == INT32_MAX) {
+        return 0;
+      }
+      ++count;
+    }
+    return result == AVERROR_EOF ? count : 0;
+  }
+
+  int32_t decoded_count() const { return scan_complete_ ? decoded_count_ : 0; }
+
+  bool scan() {
+    selective_ = true;
+    scan_complete_ = decode();
+    return scan_complete_;
+  }
+
+  bool read_sampled(const VideoFrameSelector& select_frames,
+                    torch::Tensor& tensor,
+                    VideoMetadata& metadata,
+                    uint64_t max_video_bytes,
+                    uint64_t max_total_bytes) {
+    selective_ = true;
+    if (select_frames.apply_display_rotation) {
+      rotation_ =
+          get_video_rotation(*fmt_ctx_->streams[stream_index_]->codecpar);
+    }
+    planar_selected_frames_ = parallel_video_decode_ && !rotation_;
+    match_opencv_rgb_ = select_frames.match_opencv_rgb;
+    max_video_bytes_ = std::min(max_video_bytes, max_total_bytes);
+    max_total_bytes_ = max_total_bytes;
+    selected_ = select_frames(metadata);
+    if (!std::is_sorted(selected_.begin(), selected_.end()) ||
+        (!selected_.empty() &&
+         (selected_.front() < 0 ||
+          selected_.back() >= metadata.total_num_frames))) {
+      return false;
+    }
+    selected_.erase(std::unique(selected_.begin(), selected_.end()),
+                    selected_.end());
+    if (!scan()) {
+      return false;
+    }
+    if (decoded_count_ == metadata.total_num_frames && !selected_.empty() &&
+        next_selected_ == selected_.size()) {
+      tensor = planar_selected_frames_ ? selected_frames_
+                                       : selected_frames_.permute({0, 3, 1, 2});
+      metadata.frame_indices = torch::tensor(selected_, torch::kInt64);
+      metadata.frames_preselected = true;
+      return true;
+    }
+    return false;
+  }
+
+  SampledVideoDecodeStatus sampled_failure() const { return sampled_failure_; }
 
   bool read(torch::Tensor& tensor, VideoMetadata& metadata) {
     CHECK(frames_.empty()) << "frames is not cleared before read";
@@ -483,31 +724,70 @@ class MemoryVideoReader : public MemoryMediaReader {
   }
 
   bool handle_frame(AVFrame* f) override {
-    if (rgb_frame_ &&
-        (rgb_frame_->width != f->width || rgb_frame_->height != f->height)) {
-      LOG(ERROR) << "Video frame " << frames_.size() + 1 << " has dimensions "
+    if (!frame_size_) {
+      frame_size_.emplace(f->width, f->height);
+    } else if (frame_size_->width != f->width ||
+               frame_size_->height != f->height) {
+      const size_t frame_index =
+          selective_ ? static_cast<size_t>(decoded_count_) : frames_.size();
+      LOG(ERROR) << "Video frame " << frame_index + 1 << " has dimensions "
                  << f->width << "x" << f->height << ", expected "
-                 << rgb_frame_->width << "x" << rgb_frame_->height
+                 << frame_size_->width << "x" << frame_size_->height
                  << " (width x height). All video frames must have the same "
                     "dimensions.";
       return false;
     }
 
-    // init colorspace converter once based on first frame
-    if (!sws_ctx_) {
-      sws_ctx_ = sws_getContext(f->width,
-                                f->height,
-                                static_cast<AVPixelFormat>(f->format),
-                                f->width,
-                                f->height,
-                                AV_PIX_FMT_RGB24,
-                                SWS_BILINEAR,
-                                nullptr,
-                                nullptr,
-                                nullptr);
-      if (!sws_ctx_) {
+    if (selective_) {
+      if (decoded_count_ == INT32_MAX) {
         return false;
       }
+      const int32_t frame_index = decoded_count_++;
+      if (next_selected_ == selected_.size() ||
+          selected_[next_selected_] != frame_index) {
+        return true;
+      }
+      if (!prepare_selected_frames(f->height, f->width)) {
+        return false;
+      }
+    }
+    const bool use_rgba = match_opencv_rgb_ && use_neon_rgba_for_video(*f);
+    const AVPixelFormat output_format = use_rgba            ? AV_PIX_FMT_RGBA
+                                        : match_opencv_rgb_ ? AV_PIX_FMT_BGR24
+                                                            : AV_PIX_FMT_RGB24;
+    const auto input_format = static_cast<AVPixelFormat>(f->format);
+    if (match_opencv_rgb_) {
+      const VideoColorConversion color{f->width,
+                                       f->height,
+                                       input_format,
+                                       output_format,
+                                       f->colorspace,
+                                       f->color_range,
+                                       f->chroma_location};
+      if (!color_conversion_ || *color_conversion_ != color) {
+        SwsContext* context = make_opencv_color_context(color);
+        if (!context) {
+          return false;
+        }
+        sws_freeContext(sws_ctx_);
+        sws_ctx_ = context;
+        color_conversion_ = color;
+      }
+    } else {
+      sws_ctx_ = sws_getCachedContext(sws_ctx_,
+                                      f->width,
+                                      f->height,
+                                      input_format,
+                                      f->width,
+                                      f->height,
+                                      output_format,
+                                      SWS_BILINEAR,
+                                      nullptr,
+                                      nullptr,
+                                      nullptr);
+    }
+    if (!sws_ctx_) {
+      return false;
     }
 
     // use an FFmpeg-allocated frame so sws_scale writes into a buffer with the
@@ -521,9 +801,9 @@ class MemoryVideoReader : public MemoryMediaReader {
 
     // (re)allocate the RGB buffer when input changes
     if (rgb_frame_->width != f->width || rgb_frame_->height != f->height ||
-        rgb_frame_->format != AV_PIX_FMT_RGB24 || !rgb_frame_->data[0]) {
+        rgb_frame_->format != output_format || !rgb_frame_->data[0]) {
       av_frame_unref(rgb_frame_);
-      rgb_frame_->format = AV_PIX_FMT_RGB24;
+      rgb_frame_->format = output_format;
       rgb_frame_->width = f->width;
       rgb_frame_->height = f->height;
       if (av_frame_get_buffer(rgb_frame_, 0) < 0) {
@@ -534,7 +814,6 @@ class MemoryVideoReader : public MemoryMediaReader {
       return false;
     }
 
-    // convert the current decoded frame into RGB24
     if (sws_scale(sws_ctx_,
                   f->data,
                   f->linesize,
@@ -545,14 +824,19 @@ class MemoryVideoReader : public MemoryMediaReader {
       return false;
     }
 
+    if (selective_) {
+      return store_selected_frame(output_format);
+    }
+
     // build CHW uint8 tensor
     const int64_t H = f->height;
     const int64_t W = f->width;
     const int64_t src_ls = rgb_frame_->linesize[0];
+    constexpr int64_t pixel_stride = 3;
 
     auto rgb = torch::from_blob(rgb_frame_->data[0],
                                 {3, H, W},  // [C,H,W]
-                                {1, src_ls, 3},
+                                {1, src_ls, pixel_stride},
                                 torch::TensorOptions().dtype(torch::kUInt8))
                    .contiguous();
 
@@ -561,9 +845,124 @@ class MemoryVideoReader : public MemoryMediaReader {
   }
 
  private:
+  bool prepare_selected_frames(int32_t height, int32_t width) {
+    const bool swap_dimensions = rotation_ && *rotation_ != cv::ROTATE_180;
+    const int32_t output_width = swap_dimensions ? height : width;
+    const int32_t output_height = swap_dimensions ? width : height;
+    if (selected_frames_.defined()) {
+      return selected_frames_.size(planar_selected_frames_ ? 2 : 1) ==
+                 output_height &&
+             selected_frames_.size(planar_selected_frames_ ? 3 : 2) ==
+                 output_width;
+    }
+    if (height <= 0 || width <= 0) {
+      return false;
+    }
+    const uint64_t frame_bytes = static_cast<uint64_t>(height) * width * 3;
+    if (selected_.size() > max_video_bytes_ / frame_bytes) {
+      sampled_failure_ = SampledVideoDecodeStatus::VIDEO_LIMIT;
+      return false;
+    }
+    auto reservation = std::make_shared<SampledVideoReservation>();
+    if (!reservation->acquire(selected_.size() * frame_bytes,
+                              max_total_bytes_)) {
+      sampled_failure_ = SampledVideoDecodeStatus::BUSY;
+      return false;
+    }
+    const int64_t count = static_cast<int64_t>(selected_.size());
+    const std::array<int64_t, 4> shape =
+        planar_selected_frames_
+            ? std::array<int64_t, 4>{count, 3, output_height, output_width}
+            : std::array<int64_t, 4>{count, output_height, output_width, 3};
+    auto owned = torch::empty(shape, torch::kUInt8);
+    auto* data = owned.data_ptr<uint8_t>();
+    selected_frames_ = torch::from_blob(
+        data,
+        shape,
+        [owned = std::move(owned),
+         reservation = std::move(reservation)](void*) mutable {
+          owned.reset();
+          reservation.reset();
+        },
+        torch::kUInt8);
+    return true;
+  }
+
+  bool store_selected_frame(AVPixelFormat format) {
+    const int32_t width = rgb_frame_->width;
+    const int32_t height = rgb_frame_->height;
+    const int64_t plane_bytes = static_cast<int64_t>(width) * height;
+    uint8_t* destination =
+        selected_frames_.data_ptr<uint8_t>() + next_selected_ * plane_bytes * 3;
+    const bool use_rgba = format == AV_PIX_FMT_RGBA;
+    const bool convert = use_rgba || format == AV_PIX_FMT_BGR24;
+    const auto conversion = use_rgba ? cv::COLOR_RGBA2RGB : cv::COLOR_BGR2RGB;
+    cv::Mat source(height,
+                   width,
+                   use_rgba ? CV_8UC4 : CV_8UC3,
+                   rgb_frame_->data[0],
+                   rgb_frame_->linesize[0]);
+    if (planar_selected_frames_) {
+      const bool bgr = format == AV_PIX_FMT_BGR24;
+      std::array<cv::Mat, 4> planes = {
+          cv::Mat(height,
+                  width,
+                  CV_8UC1,
+                  destination + (bgr ? 2 * plane_bytes : 0)),
+          cv::Mat(height, width, CV_8UC1, destination + plane_bytes),
+          cv::Mat(height,
+                  width,
+                  CV_8UC1,
+                  destination + (bgr ? 0 : 2 * plane_bytes)),
+          planar_alpha_};
+      cv::split(source, planes.data());
+      planar_alpha_ = std::move(planes[3]);
+    } else if (rotation_) {
+      if (convert) {
+        cv::cvtColor(source, rotation_buffer_, conversion);
+        source = rotation_buffer_;
+      }
+      cv::Mat rgb(selected_frames_.size(1),
+                  selected_frames_.size(2),
+                  CV_8UC3,
+                  destination);
+      cv::rotate(source, rgb, *rotation_);
+    } else if (convert) {
+      cv::Mat rgb(height, width, CV_8UC3, destination);
+      cv::cvtColor(source, rgb, conversion);
+    } else {
+      const int64_t row_bytes = static_cast<int64_t>(width) * 3;
+      for (int32_t row = 0; row < height; ++row) {
+        std::memcpy(destination + row * row_bytes,
+                    rgb_frame_->data[0] +
+                        static_cast<int64_t>(row) * rgb_frame_->linesize[0],
+                    row_bytes);
+      }
+    }
+    ++next_selected_;
+    return true;
+  }
+
+  std::optional<cv::Size> frame_size_;
   SwsContext* sws_ctx_ = nullptr;
+  std::optional<VideoColorConversion> color_conversion_;
   AVFrame* rgb_frame_ = nullptr;
   std::vector<torch::Tensor> frames_;
+  bool selective_ = false;
+  bool match_opencv_rgb_ = false;
+  bool planar_selected_frames_ = false;
+  uint64_t max_video_bytes_ = 0;
+  uint64_t max_total_bytes_ = 0;
+  SampledVideoDecodeStatus sampled_failure_ =
+      SampledVideoDecodeStatus::DECODE_ERROR;
+  bool scan_complete_ = false;
+  int32_t decoded_count_ = 0;
+  size_t next_selected_ = 0;
+  std::vector<int64_t> selected_;
+  torch::Tensor selected_frames_;
+  std::optional<cv::RotateFlags> rotation_;
+  cv::Mat rotation_buffer_;
+  cv::Mat planar_alpha_;
 };
 
 class MemoryAudioReader : public MemoryMediaReader {
@@ -759,6 +1158,16 @@ bool OpenCVImageDecoder::decode(std::string_view raw_data,
     convert_decoded_image_to_rgb(image, rgb_image);
   }
 
+  if (rgb_image.depth() == CV_8U && rgb_image.isContinuous()) {
+    t = torch::from_blob(
+            rgb_image.data,
+            {rgb_image.rows, rgb_image.cols, rgb_image.channels()},
+            [owner = rgb_image](void*) mutable { owner.release(); },
+            torch::kUInt8)
+            .permute({2, 0, 1});
+    return true;
+  }
+
   torch::Tensor tensor =
       torch::from_blob(rgb_image.data,
                        {rgb_image.rows, rgb_image.cols, rgb_image.channels()},
@@ -820,6 +1229,83 @@ bool FFmpegVideoDecoder::decode(std::string_view raw_data,
     return false;
   }
   return true;
+}
+
+SampledVideoDecodeStatus FFmpegVideoDecoder::decode_sampled(
+    std::string_view raw_data,
+    const VideoFrameSelector& select_frames,
+    torch::Tensor& tensor,
+    VideoMetadata& metadata,
+    uint64_t max_video_bytes,
+    uint64_t max_total_bytes) {
+  using Status = SampledVideoDecodeStatus;
+  if (!select_frames) {
+    return Status::DECODE_ERROR;
+  }
+  const auto* bytes = reinterpret_cast<const uint8_t*>(raw_data.data());
+  constexpr int32_t kSampledDecoderThreads = 4;
+  int32_t observed_frames = 0;
+  std::optional<int32_t> packet_count;
+  const auto read = [&](int32_t frame_count) {
+    MemoryVideoReader reader(bytes, raw_data.size());
+    VideoMetadata candidate;
+    if (!reader.init(candidate,
+                     kSampledDecoderThreads,
+                     select_frames.match_opencv_rgb)) {
+      return Status::DECODE_ERROR;
+    }
+    if (!(candidate.fps > 0.0)) {
+      if (!select_frames.match_opencv_rgb) {
+        return Status::DECODE_ERROR;
+      }
+      candidate.fps = 24.0;
+    }
+    candidate.total_num_frames =
+        frame_count > 0 ? frame_count : reader.frame_count_hint();
+    if (candidate.total_num_frames == 0) {
+      packet_count = reader.count_video_packets();
+      return Status::DECODE_ERROR;
+    }
+    candidate.duration = candidate.total_num_frames / candidate.fps;
+    if (!reader.read_sampled(select_frames,
+                             tensor,
+                             candidate,
+                             max_video_bytes,
+                             max_total_bytes)) {
+      if (reader.decoded_count() != candidate.total_num_frames) {
+        observed_frames = reader.decoded_count();
+      }
+      return reader.sampled_failure();
+    }
+    metadata = std::move(candidate);
+    return Status::SUCCESS;
+  };
+  const auto status = read(0);
+  if (!packet_count) {
+    return status == Status::DECODE_ERROR && observed_frames > 0
+               ? read(observed_frames)
+               : status;
+  }
+  if (*packet_count > 0) {
+    const auto packet_status = read(*packet_count);
+    if (packet_status == Status::SUCCESS) {
+      return packet_status;
+    }
+    if (observed_frames > 0) {
+      return read(observed_frames);
+    }
+  }
+  {
+    MemoryVideoReader counter(bytes, raw_data.size());
+    VideoMetadata ignored;
+    if (!counter.init(
+            ignored, kSampledDecoderThreads, select_frames.match_opencv_rgb) ||
+        !counter.scan() || counter.decoded_count() <= 0) {
+      return Status::DECODE_ERROR;
+    }
+    observed_frames = counter.decoded_count();
+  }
+  return read(observed_frames);
 }
 
 bool FFmpegAudioDecoder::decode(std::string_view raw_data,
@@ -1040,6 +1526,10 @@ class MemoryMediaWriter {
 
   bool drain_packets() {
     while (avcodec_receive_packet(codec_ctx_, pkt_) == 0) {
+      if (pkt_->duration == 0) {
+        pkt_->duration = av_rescale_q(
+            1, av_inv_q(codec_ctx_->framerate), codec_ctx_->time_base);
+      }
       av_packet_rescale_ts(pkt_, codec_ctx_->time_base, stream_->time_base);
       pkt_->stream_index = stream_->index;
       if (av_interleaved_write_frame(fmt_ctx_, pkt_) < 0) {

@@ -58,6 +58,8 @@ class MultimodalConfig final {
          "use_audio_in_video",
          "audio_max_upload_file_mb",
          "audio_max_decode_duration_s",
+         "video_decode_max_mib",
+         "video_decode_total_mib",
          "enable_mm_encoder_dp"}};
     return kOptionCategory;
   }
@@ -91,6 +93,8 @@ class MultimodalConfig final {
   PROPERTY(int32_t, audio_max_upload_file_mb) = 25;
 
   PROPERTY(int32_t, audio_max_decode_duration_s) = 600;
+  PROPERTY(int32_t, video_decode_max_mib) = 1536;
+  PROPERTY(int32_t, video_decode_total_mib) = 2560;
 
   PROPERTY(bool, enable_mm_encoder_dp) = false;
 

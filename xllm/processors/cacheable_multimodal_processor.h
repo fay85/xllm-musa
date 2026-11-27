@@ -37,6 +37,10 @@ class CacheableMultimodalProcessor final : public MultimodalProcessorBase {
                       std::vector<int32_t>& token_ids) override;
   bool process_multimodal(const MMInput& inputs, MMData& data) const override;
 
+  VideoFrameSelector video_frame_selector() const override {
+    return inner_->video_frame_selector();
+  }
+
   bool bind_prompt_tokens(const std::vector<int32_t>& token_ids,
                           MMData& mm_data) const override;
 

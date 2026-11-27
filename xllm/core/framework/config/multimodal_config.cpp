@@ -105,6 +105,14 @@ DEFINE_int32(audio_max_decode_duration_s,
              "Maximum decoded speech-to-text audio duration in seconds. "
              "0 disables the limit.");
 
+DEFINE_int32(video_decode_max_mib,
+             1536,
+             "Maximum retained sampled RGB storage per video in MiB.");
+
+DEFINE_int32(video_decode_total_mib,
+             2560,
+             "Maximum retained sampled RGB storage per server process in MiB.");
+
 DEFINE_bool(enable_mm_encoder_dp,
             false,
             "Enable encoder data parallelism for multi-modal models.");
@@ -127,6 +135,8 @@ void MultimodalConfig::from_flags() {
   XLLM_CONFIG_ASSIGN_FROM_FLAG(use_audio_in_video);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(audio_max_upload_file_mb);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(audio_max_decode_duration_s);
+  XLLM_CONFIG_ASSIGN_FROM_FLAG(video_decode_max_mib);
+  XLLM_CONFIG_ASSIGN_FROM_FLAG(video_decode_total_mib);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_mm_encoder_dp);
 }
 
@@ -146,6 +156,8 @@ void MultimodalConfig::from_json(const JsonReader& json) {
   XLLM_CONFIG_ASSIGN_FROM_JSON(use_audio_in_video);
   XLLM_CONFIG_ASSIGN_FROM_JSON(audio_max_upload_file_mb);
   XLLM_CONFIG_ASSIGN_FROM_JSON(audio_max_decode_duration_s);
+  XLLM_CONFIG_ASSIGN_FROM_JSON(video_decode_max_mib);
+  XLLM_CONFIG_ASSIGN_FROM_JSON(video_decode_total_mib);
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_mm_encoder_dp);
 }
 
@@ -181,6 +193,10 @@ void MultimodalConfig::append_config_json(
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, audio_max_decode_duration_s);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
+      config_json, default_config, video_decode_max_mib);
+  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
+      config_json, default_config, video_decode_total_mib);
+  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, enable_mm_encoder_dp);
 }
 
@@ -194,6 +210,8 @@ void MultimodalConfig::initialize() {
   if (const auto& json_config = config::get_parsed_json_config()) {
     from_json(*json_config);
   }
+  CHECK_GT(video_decode_max_mib(), 0);
+  CHECK_GE(video_decode_total_mib(), video_decode_max_mib());
   processor_args_ = nlohmann::json::object();
   if (mm_args().empty()) {
     return;

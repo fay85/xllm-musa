@@ -185,6 +185,8 @@ Qwen2VLImageProcessor::Qwen2VLImageProcessor(const ModelArgs& args,
   }
   min_tokens_ = args.mm_image_min_tokens();
   max_tokens_ = args.mm_image_max_tokens();
+  use_glm_image_padding_ =
+      args.model_type() == "glm5_next" && min_tokens_ > 0 && max_tokens_ > 0;
 
   min_pixels_ =
       config.value("image.min_pixels",
@@ -243,8 +245,43 @@ bool Qwen2VLImageProcessor::process_image(
     }
 
     std::tie(resized_height, resized_width) = *size;
-    batch_images = transforms::resize(
-        batch_images, {resized_height, resized_width}, resample_, true);
+    if (use_glm_image_padding_) {
+      // GLM keeps content aspect ratio and pads only the right/bottom edges.
+      // Enlarge content only when its area falls below the minimum token
+      // budget.
+      const int64_t height = shape[2];
+      const int64_t width = shape[3];
+      const int64_t factor = static_cast<int64_t>(patch_size_) * merge_size_;
+      const bool allow_upscale =
+          height * width < static_cast<int64_t>(min_tokens_) * factor * factor;
+      double scale = std::min(static_cast<double>(resized_height) / height,
+                              static_cast<double>(resized_width) / width);
+      if (!allow_upscale) {
+        scale = std::min(1.0, scale);
+      }
+      const int64_t content_height =
+          std::clamp(static_cast<int64_t>(std::floor(height * scale)),
+                     int64_t{1},
+                     resized_height);
+      const int64_t content_width =
+          std::clamp(static_cast<int64_t>(std::floor(width * scale)),
+                     int64_t{1},
+                     resized_width);
+      if (height != content_height || width != content_width) {
+        batch_images = transforms::resize(
+            batch_images, {content_height, content_width}, resample_, true);
+      }
+      auto canvas = torch::zeros(
+          {batch_size, images.front().size(0), resized_height, resized_width},
+          batch_images.options());
+      canvas.slice(2, 0, content_height)
+          .slice(3, 0, content_width)
+          .copy_(batch_images);
+      batch_images = std::move(canvas);
+    } else {
+      batch_images = transforms::resize(
+          batch_images, {resized_height, resized_width}, resample_, true);
+    }
   }
 
   if (do_normalize_) {

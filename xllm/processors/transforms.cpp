@@ -243,8 +243,10 @@ torch::Tensor resize(const torch::Tensor& image,
       LOG(FATAL) << "Invalid resample value. Must be one of 1, 2, or 3.";
   }
   auto input = image.dim() == 3 ? image.unsqueeze(0) : image;
-  auto resized =
-      torch::nn::functional::interpolate(input, options).clamp(0, 255);
+  auto resized = torch::nn::functional::interpolate(input, options);
+  if (resized.scalar_type() != torch::kUInt8) {
+    resized = resized.clamp(0, 255);
+  }
   return image.dim() == 3 ? resized.squeeze(0) : resized;
 }
 
@@ -315,11 +317,6 @@ torch::Tensor normalize(const torch::Tensor& image,
                << "image.";
   }
 
-  auto result = image;
-  if (!image.is_floating_point()) {
-    result = image.to(torch::kFloat32);
-  }
-
   auto device = image.device();
   auto options = torch::dtype(torch::kFloat32).device(device);
 
@@ -328,7 +325,9 @@ torch::Tensor normalize(const torch::Tensor& image,
   auto mean_tensor = mean.to(options).reshape(mean_shape);
   auto std_tensor = std.to(options).reshape(mean_shape);
 
-  result = result.sub(mean_tensor);
+  auto result = image.is_floating_point()
+                    ? image.sub(mean_tensor)
+                    : image.to(torch::kFloat32).sub_(mean_tensor);
   return result.div_(std_tensor);
 }
 

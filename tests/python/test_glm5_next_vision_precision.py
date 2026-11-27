@@ -16,19 +16,169 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+from types import SimpleNamespace
+
 import pytest
 import torch
 import torch.nn as nn
+from safetensors.torch import save_file
 
 from xllm.python.models.glm5_next import Glm5NextConfig, Glm5NextMLP
 from xllm.python.models.glm5_next_vl import (
     Glm5NextVisionConfig,
     Glm5NextVisionModel,
+    Glm5NextVLModel,
     VisionBlock,
     VisionRMSNorm,
     VisionRotaryEmbedding,
     VisionRowParallelLinear,
 )
+
+
+def _rotation_config(model_path: Path, dtype: str = "bfloat16") -> dict:
+    return {
+        "model_path": str(model_path),
+        "device": "cpu",
+        "dtype": dtype,
+        "hidden_size": 4,
+        "vocab_size": 8,
+        "num_hidden_layers": 0,
+        "vision_config": {
+            "depth": 0,
+            "hidden_size": 4,
+            "num_heads": 1,
+            "out_hidden_size": 4,
+            "projection_intermediate_size": 8,
+            "patch_size": 2,
+        },
+    }
+
+
+def _rotation_description() -> dict:
+    return {
+        "is_rot_used": True,
+        "optional": {"quarot": {"rotation_map": {"global_rotation": "optional/quarot.safetensors"}}},
+    }
+
+
+def _write_rotation_checkpoint(path: Path, description: dict, rotation: torch.Tensor) -> None:
+    (path / "quant_model_description.json").write_text(json.dumps(description), encoding="utf-8")
+    (path / "optional").mkdir(exist_ok=True)
+    # A decoy root tensor must never substitute for optional global_rotation.
+    save_file({"rot.weight": torch.eye(4)}, path / "rot.safetensors")
+    save_file({"global_rotation": rotation}, path / "optional/quarot.safetensors")
+
+
+@pytest.mark.parametrize("export_kind", ["no_description", "not_rotated", "integrated"])
+def test_vision_connector_preserves_unrotated_and_exported_features(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, export_kind: str
+) -> None:
+    description = _rotation_description()
+    if export_kind == "not_rotated":
+        description["is_rot_used"] = False
+    elif export_kind == "integrated":
+        names = [
+            "patch_embed.proj.weight",
+            "patch_embed.proj.bias",
+            "post_layernorm.weight",
+            "downsample.weight",
+            "downsample.bias",
+            "merger.proj.weight",
+            "merger.post_projection_norm.weight",
+            "merger.post_projection_norm.bias",
+            "merger.gate_proj.weight",
+            "merger.up_proj.weight",
+            "merger.down_proj.weight",
+        ]
+        description.update({"model.visual." + name: "FLOAT" for name in names})
+    # No mapped file: these paths must not try to load or apply Q.
+    if export_kind != "no_description":
+        (tmp_path / "quant_model_description.json").write_text(json.dumps(description), encoding="utf-8")
+    model = Glm5NextVLModel(_rotation_config(tmp_path))
+    features = torch.tensor([[1, 2, 3, 4]], dtype=torch.bfloat16)
+    monkeypatch.setattr(model.vision_model, "forward", lambda *args: SimpleNamespace(pooler_output=features))
+    assert model.encode(torch.empty(0), torch.empty(0)) is features
+    assert model._vision_output_rotation is None
+
+
+@pytest.mark.parametrize("dtype", ["bfloat16", "float32"])
+def test_separate_vision_connector_rotates_once_in_fp32(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, dtype: str
+) -> None:
+    rotation = torch.tensor([[0.8, -0.6, 0, 0], [0.6, 0.8, 0, 0], [0, 0, 0, -1], [0, 0, 1, 0]])
+    _write_rotation_checkpoint(tmp_path, _rotation_description(), rotation)
+    model = Glm5NextVLModel(_rotation_config(tmp_path, dtype))
+    assert model._vision_output_rotation.dtype == torch.float32
+    torch.testing.assert_close(model._vision_output_rotation, rotation, rtol=0, atol=0)
+    assert "_vision_output_rotation" not in model.state_dict()
+    features = torch.randn(32, 4, generator=torch.Generator().manual_seed(42)).to(model.dtype)
+    original = features.clone()
+    expected = (features.float() @ rotation).to(features.dtype)
+    assert not torch.equal(expected, (features.float() @ rotation.T).to(features.dtype))
+    if dtype == "bfloat16":
+        assert not torch.equal(expected, features @ rotation.bfloat16())
+    calls = []
+
+    def _vision_forward(pixels: torch.Tensor, grid: torch.Tensor) -> SimpleNamespace:
+        calls.append(pixels.dtype)
+        return SimpleNamespace(pooler_output=features)
+
+    monkeypatch.setattr(model.vision_model, "forward", _vision_forward)
+    for _ in range(2):
+        actual = model.encode(torch.empty(0, dtype=torch.float64), torch.empty(0))
+        assert actual.dtype == features.dtype
+        torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+    assert calls == [model.dtype, model.dtype]
+    torch.testing.assert_close(features, original, rtol=0, atol=0)
+    prepared = model.prepare_multimodal_inputs(
+        torch.tensor([0, 1, 2]),
+        {"image|embedding": expected[:1], "image|mask": torch.tensor([False, True, False])},
+    )
+    torch.testing.assert_close(prepared.inputs_embeds[1], expected[0], rtol=0, atol=0)
+    torch.testing.assert_close(prepared.inputs_embeds[[0, 2]], model.model.embed_tokens(torch.tensor([0, 2])))
+    features = torch.empty(0, 4, dtype=model.dtype)
+    assert model.encode(torch.empty(0), torch.empty(0)).shape == (0, 4)
+    features = torch.empty(1, 3, dtype=model.dtype)
+    with pytest.raises(ValueError, match="feature width"):
+        model.encode(torch.empty(0), torch.empty(0))
+
+
+@pytest.mark.parametrize(
+    "invalid_kind, message",
+    [
+        ("partial_visual", "complete FLOAT"),
+        ("missing_map", "rotation_map.global_rotation"),
+        ("missing_file", "No such file"),
+        ("wrong_key", "must contain global_rotation"),
+        ("wrong_shape", "must have shape"),
+        ("nonfinite", "finite floating-point"),
+        ("integer", "finite floating-point"),
+    ],
+)
+def test_separate_vision_connector_rejects_ambiguous_or_invalid_metadata(
+    tmp_path: Path, invalid_kind: str, message: str
+) -> None:
+    description = _rotation_description()
+    rotation = torch.eye(4)
+    if invalid_kind == "partial_visual":
+        description["model.visual.merger.down_proj.weight"] = "FLOAT"
+    elif invalid_kind == "missing_map":
+        description["optional"] = {}
+    elif invalid_kind == "missing_file":
+        description["optional"]["quarot"]["rotation_map"]["global_rotation"] = "missing.safetensors"
+    elif invalid_kind == "wrong_shape":
+        rotation = torch.eye(3)
+    elif invalid_kind == "nonfinite":
+        rotation[0, 0] = float("nan")
+    elif invalid_kind == "integer":
+        rotation = rotation.long()
+    _write_rotation_checkpoint(tmp_path, description, rotation)
+    if invalid_kind == "wrong_key":
+        save_file({"rot.weight": torch.eye(4)}, tmp_path / "optional/quarot.safetensors")
+    with pytest.raises((ValueError, FileNotFoundError), match=message):
+        Glm5NextVLModel(_rotation_config(tmp_path))
 
 
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
